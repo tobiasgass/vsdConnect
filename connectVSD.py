@@ -1,5 +1,8 @@
 #!/usr/bin/python
 
+# connectVSD 0.1
+# (c) Tobias Gass, 2015
+
 import sys
 import urllib
 import urllib2
@@ -15,6 +18,7 @@ class Folder:
     ID=''
     parentFolder=None
     childFolders=None
+    level=0
 
 class VSDConnecter:
     url='https://www.virtualskeleton.ch/api'
@@ -22,8 +26,6 @@ class VSDConnecter:
     def __init__(self,*args):
         if (len(args)==0):
             username=raw_input("Username: ")
-            #password=raw_input("Password : ")
-            #username=getpass.getuser()
             password=getpass.getpass()
             self.authstr=base64.encodestring(username+":"+password)
         elif (len(args)==1):
@@ -68,7 +70,7 @@ class VSDConnecter:
         req=urllib2.Request(self.url+request)
         self.addAuth(req)
         try:
-            result=urllib2.urlopen(req).read()
+            result=urllib2.urlopen(req)
             return json.load(result)
 
         except urllib2.URLError as err:
@@ -110,7 +112,7 @@ class VSDConnecter:
             result=urllib2.urlopen(req)
             return json.load(result)
         except urllib2.URLError as err:
-            print "Error retrieving request",req,"from SMIR:",err
+            print "Error putting request",req,"from SMIR:",err
             #sys.exit()
 
     def putRequestSimple(self,request):
@@ -199,7 +201,18 @@ class VSDConnecter:
         except urllib2.URLError as err:
             print "Error retrieving folders from SMIR:",err
             sys.exit()
-       
+    
+    def getFolder(self,ID):
+        #print self.url+"/folders"
+        req=urllib2.Request(self.url+"/folders/"+str(ID))
+        self.addAuth(req)
+        result=""
+        try:
+            result=json.load(urllib2.urlopen(req))
+            return result
+        except urllib2.URLError as err:
+            print "Error retrieving folder",ID," from SMIR:",err
+            sys.exit()
 
     def getFileListInFolder(self,ID):
         #print self.url+"/folders"
@@ -223,7 +236,7 @@ class VSDConnecter:
             folderHash[ID]=Folder()
             folderHash[ID].ID=ID
             folderHash[ID].name=folder['name']
-            folderHash[ID].childFolders=[]#{}
+            folderHash[ID].childFolders=[]
        
     #second pass: create references to parent and child folders
         for folder in folderList['items']:
@@ -258,17 +271,21 @@ class VSDConnecter:
         try:
             result=urllib2.urlopen(req)
             return json.load(result)
-    
         except urllib2.URLError as err:
             print "Error uploading",filenam,err
             #sys.exit()
 
-    def addFileToFolder(self,folderID,fileID):
+    def addFileToFolder(self,fileID,folderID):
         #get folder object
-        folder=self.getObject(folderID)
+        folder=self.getFolder(folderID)
         entry={'selfUrl' : self.url+'/objects/'+str(fileID)}
-        folder['containedObjects'].append(entry)
-        return self.putRequest('folders',json.dumps(folder))
+        if folder['containedObjects'] is not None:
+            folder['containedObjects'].append(entry)
+        else:
+            folder['containedObjects']=[]
+            folder['containedObjects'].append(entry)
+        print folder
+        return self.putRequest('/folders',json.dumps(folder))
         
 
     def addOntologyRelation(self,ontologyRelation):
@@ -321,8 +338,9 @@ class VSDConnecter:
             sys.exit(0)
         print segObj
 
-        segObj["type"]=2
-        self.putRequest("/objects/"+str(segObjID),json.dumps(segObj))
+        #segObj["type"]=2
+        #segObj["
+        #self.putRequest("/objects/"+str(segObjID),json.dumps(segObj))
 
         #link segmentation to original object
         self.addLink(objectID,segObjID)
@@ -348,9 +366,41 @@ class VSDConnecter:
             print
           
         return segObjID
-        #set type
 
+    def setRightsBasedOnReferenceObject(self,objectID,referenceObjectID):
+        #get reference object
+        referenceObject=self.getObject(referenceObjectID)
+        
+        #set group rights
+        if referenceObject['objectGroupRights'] is not None:
+            for right in referenceObject['objectGroupRights']:
+            #get object
+                print right
+                rightObject=self.getObjectByUrl(right["selfUrl"])
+            #create new right with the correct objectID
+                newRight={}
+                newRight["relatedRights"]=rightObject["relatedRights"]
+                newRight["relatedGroup"]=rightObject["relatedGroup"]
+                newRight["relatedObject"]={"selfUrl":self.url+"/objects"+str(objectID)}
+                self.putRequest("/object-group-rights",json.dumps(newRight))
+            
+        #set user rights
+        if referenceObject['objectUserRights'] is not None:
+            
+            for right in referenceObject['objectUserRights']:
+            #get object
+                rightObject=self.getObjectByUrl(right["selfUrl"])
+            #create new right with the correct objectID
+                newRight={}
+                newRight["relatedRights"]=rightObject["relatedRights"]
+                newRight["relatedUser"]=rightObject["relatedUser"]
+                newRight["relatedObject"]={"selfUrl":self.url+"/objects"+str(objectID)}
+                self.putRequest("/object-user-rights",json.dumps(newRight))
+                                       
+        
+     
         
 
 
  
+                                           
