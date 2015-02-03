@@ -14,24 +14,26 @@ args=parser.parse_args()
 #con=connectVSD.VSDConnecter("username","password")
 #con=connectVSD.VSDConnecter()
 
-con=connectVSD.VSDConnecter("Z2Fzc3RAdmlzaW9uLmVlLmV0aHouY2g6VGgxbktiVj0=")
+con=connectVSD.VSDConnecter("ZGVtb0B2aXJ0dWFsc2tlbGV0b24uY2g6ZGVtbw==")
+con.seturl("https://demo.virtualskeleton.ch/api/")
 
 
-SSMFolderID=2811
+ParentFolderID=2811
 print "Retrieving folder list from SMIR.."
 folderList=con.getFolderList()
 
+##parsing folder list into linked datastructure
 folderHash=con.readFolders(folderList)
 
 targetProject=args.targetProject
 
-SSMFolder=folderHash[SSMFolderID]
+ParentFolder=folderHash[ParentFolderID]
 ProjectFolder=None
 OriginalFolder=None
 SegmentationFolder=None
 
 print "Retrieving target folder IDs from folder list."
-for child in SSMFolder.childFolders:
+for child in ParentFolder.childFolders:
     if (child.name==targetProject):
         ProjectFolder=child
         break
@@ -45,9 +47,8 @@ print "Retrieving file list from folder.."
 fileList=con.getFileListInFolder(OriginalFolder.ID)
 fileIDList=con.getFileIDs(fileList)
 
+print "Downloading files..."
 for ID in fileIDList:
     print ID
     con.downloadFile(ID,args.targetFolder)
 
-
-#con.downloadFile(56738)
