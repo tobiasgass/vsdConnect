@@ -10,7 +10,6 @@ import base64
 import json
 import os
 import getpass
-sys.path.append('../3rdparty')
 
 from poster import encode_multipart
 #from poster.streaminghttp import register_openers
@@ -146,7 +145,7 @@ class VSDConnecter:
 
         #return filename
         if (fileObject['type']==1):
-            #DICOM
+            #IMAGE
             ##create directory
             filename+="/"+os.path.basename(filename)
             d = os.path.dirname(filename)
@@ -158,18 +157,20 @@ class VSDConnecter:
                 req=urllib2.Request(ffile['selfUrl']+"/download")
                 self.addAuth(req)
                 sfilename=filename+"_"+str(count)+".dcm"
-                print "Downloading",ffile['selfUrl']+"/download","to",sfilename
-                response=""
-                try:
-                    response=urllib2.urlopen(req)
-                except urllib2.URLError as err:
-                    print "Error downloading file",ffile['selfUrl'],err
-                    sys.exit()
-
-
-                local_file = open(sfilename, "wb")
-                local_file.write(response.read())
-                local_file.close()
+                if not os.path.exists(d):
+                    print "Downloading",ffile['selfUrl']+"/download","to",sfilename
+                    response=""
+                    try:
+                        response=urllib2.urlopen(req)
+                    except urllib2.URLError as err:
+                        print "Error downloading file",ffile['selfUrl'],err
+                        sys.exit()
+                        
+                    local_file = open(sfilename, "wb")
+                    local_file.write(response.read())
+                    local_file.close()
+                else:
+                    print "File",sfilename,"already exists, skipping"
                 count+=1
         else:
             #Nifty?
