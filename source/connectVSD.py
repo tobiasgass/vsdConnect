@@ -10,6 +10,8 @@ import base64
 import json
 import os
 import getpass
+sys.path.append('../3rdparty')
+
 from poster import encode_multipart
 #from poster.streaminghttp import register_openers
 
