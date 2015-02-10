@@ -129,13 +129,9 @@ class VSDConnecter:
             print "Error retrieving request",req,"from SMIR:",err
             #sys.exit()
 
-    def downloadFile(self,ID,outputDir="./"):
-        d = os.path.dirname(outputDir)
-        if not os.path.exists(d):
-            os.makedirs(d)
-
+    def generateBaseFilenameFromOntology(self,ID):
         fileObject=self.getObject(ID)
-        filename=outputDir
+        filename=""
         for ont in fileObject['ontologyItems']:
             ontology=self.getObjectByUrl(ont['selfUrl'])
             print ontology['term']
@@ -143,6 +139,16 @@ class VSDConnecter:
         if filename!="":
             filename+="-"
         filename+=str(ID)
+        return filename
+
+    
+    def downloadFile(self,ID,filename,dryRun=False):
+        d = os.path.dirname(filename)
+        if not os.path.exists(d):
+            os.makedirs(d)
+
+        fileObject=self.getObject(ID)
+       
 
         #return filename
         #if (fileObject['type']==1):
@@ -159,40 +165,44 @@ class VSDConnecter:
                 req=urllib2.Request(ffile['selfUrl']+"/download")
                 self.addAuth(req)
                 sfilename=filename+"_"+str(count)+".dcm"
-                if not os.path.exists(d):
+                if not os.path.exists(sfilename):
                     print "Downloading",ffile['selfUrl']+"/download","to",sfilename
-                    response=""
-                    try:
-                        response=urllib2.urlopen(req)
-                    except urllib2.URLError as err:
-                        print "Error downloading file",ffile['selfUrl'],err
-                        sys.exit()
+                    if not dryRun:
+                        response=""
+                        try:
+                            response=urllib2.urlopen(req)
+                        except urllib2.URLError as err:
+                            print "Error downloading file",ffile['selfUrl'],err
+                            sys.exit()
                         
-                    local_file = open(sfilename, "wb")
-                    local_file.write(response.read())
-                    local_file.close()
+                        local_file = open(sfilename, "wb")
+                        local_file.write(response.read())
+                        local_file.close()
                 else:
                     print "File",sfilename,"already exists, skipping"
                 count+=1
         else:
             #SINGLE FILE
             #get actual file object
+            
             fileObj=self.getObjectByUrl( fileObject['files'][0]['selfUrl'])
-            req=urllib2.Request(fileObj['downloadUrl']) #self.url+"/files/"+str(ID)+"/download")
-            print "Downloading",fileObj['downloadUrl'],"to",filename
-
-            self.addAuth(req)
-            response=""
-            try:
-                response=urllib2.urlopen(req)
-            except urllib2.URLError as err:
-                print "Error downloading file",ffile['selfUrl'],err
-                sys.exit()
             extension=fileObj['originalFilename'].split(".")[-1]
             sfilename=filename+extension
-            local_file = open(sfilename, "wb")
-            local_file.write(response.read())
-            local_file.close()
+            if not os.path.exists(sfilename):
+                req=urllib2.Request(fileObj['downloadUrl']) #self.url+"/files/"+str(ID)+"/download")
+                print "Downloading",fileObj['downloadUrl'],"to",sfilename
+                self.addAuth(req)
+                response=""
+                if not dryRun:
+                    try:
+                        response=urllib2.urlopen(req)
+                    except urllib2.URLError as err:
+                        print "Error downloading file",ffile['selfUrl'],err
+                        sys.exit()
+           
+                    local_file = open(sfilename, "wb")
+                    local_file.write(response.read())
+                    local_file.close()
             
 
     def getFolderList(self):
