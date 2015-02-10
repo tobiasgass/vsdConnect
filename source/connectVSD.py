@@ -19,6 +19,7 @@ class Folder:
     ID=''
     parentFolder=None
     childFolders=None
+    containedObjects=None
     level=0
 
 class VSDConnecter:
@@ -144,8 +145,9 @@ class VSDConnecter:
         filename+=str(ID)
 
         #return filename
-        if (fileObject['type']==1):
-            #IMAGE
+        #if (fileObject['type']==1):
+        if (len(fileObject['files'])>1):
+            #DICOM
             ##create directory
             filename+="/"+os.path.basename(filename)
             d = os.path.dirname(filename)
@@ -173,33 +175,34 @@ class VSDConnecter:
                     print "File",sfilename,"already exists, skipping"
                 count+=1
         else:
-            #Nifty?
-            for file in fileObject['files']:
-                req=urllib2.Request(fileObject['downloadUrl']) #self.url+"/files/"+str(ID)+"/download")
-                self.addAuth(req)
-                response=""
-                try:
-                    response=urllib2.urlopen(req)
-                except urllib2.URLError as err:
-                    print "Error downloading file",ffile['selfUrl'],err
-                    sys.exit()
-                sfilename=filename+".nii"
-                local_file = open(sfilename, "wb")
-                local_file.write(response.read())
-                local_file.close()
-        #dump json object
-        local_file = open(filename+".json", "w")
-        local_file.write(json.dumps(fileObject))
-        local_file.close()
+            #SINGLE FILE
+            #get actual file object
+            fileObj=self.getObjectByUrl( fileObject['files'][0]['selfUrl'])
+            req=urllib2.Request(fileObj['downloadUrl']) #self.url+"/files/"+str(ID)+"/download")
+            print "Downloading",fileObj['downloadUrl'],"to",filename
 
+            self.addAuth(req)
+            response=""
+            try:
+                response=urllib2.urlopen(req)
+            except urllib2.URLError as err:
+                print "Error downloading file",ffile['selfUrl'],err
+                sys.exit()
+            extension=fileObj['originalFilename'].split(".")[-1]
+            sfilename=filename+extension
+            local_file = open(sfilename, "wb")
+            local_file.write(response.read())
+            local_file.close()
+            
 
     def getFolderList(self):
         #print self.url+"/folders"
-        req=urllib2.Request(self.url+"/folders")
+        req=urllib2.Request(self.url+"/folders?rpp=500")
         self.addAuth(req)
         result=""
         try:
             result=json.load(urllib2.urlopen(req))
+            #result=urllib2.urlopen(req)
             return result
         except urllib2.URLError as err:
             print "Error retrieving folders from SMIR:",err
@@ -254,7 +257,12 @@ class VSDConnecter:
                     parentID=int(folder['parentFolder']['selfUrl'].split("/")[-1])
                     if (folderHash.has_key(parentID)):
                         folderHash[ID].parentFolder=folderHash[parentID]
-
+            if (not folder['containedObjects']==None):
+                folderHash[ID].containedObjects={}
+                for obj in folder['containedObjects']:
+                    objID=obj['selfUrl'].split("/")[-1]
+                    folderHash[ID].containedObjects[objID]=obj['selfUrl']
+                
         return folderHash
 
     def getFileIDs(self,fileList):
