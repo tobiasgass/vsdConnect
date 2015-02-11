@@ -1,27 +1,20 @@
 # README #
 
-to be written....
+This library implements a client for the REST API of the virtualskeletondatabase (www.virtualskeleton.ch). It supports authentication, general queries, and specific requests such as image upload/download, object linking and right management. Examples are provided in the examples directory. Please use 'demo.virtualskeleton.ch' for testing purposes.
 
 ### What is this repository for? ###
 
 * Quick summary: connect to vsd
 * Version: 0.1
-* [Learn Markdown](https://bitbucket.org/tutorials/markdowndemo)
 
 ### How do I get set up? ###
 
-* Summary of set up
-* Configuration
-* Dependencies
-* Database configuration
-* How to run tests
-* Deployment instructions
+Just add the source directory to your pythonpath
 
 ### Contribution guidelines ###
 
 * Writing tests
 * Code review
-* Other guidelines
 
 ### Who do I talk to? ###
 
