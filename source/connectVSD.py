@@ -335,7 +335,7 @@ class VSDConnecter:
     def addOntologyRelation(self,ontologyRelation):
         oType=ontologyRelation["type"]
         result=self.postRequest('/object-ontologies/'+str(oType),json.dumps(ontologyRelation))
-        result2=self.putRequestSimple("/object-ontologies/"+str(oType)+"/"+str(result["id"]))
+        #result2=self.putRequestSimple("/object-ontologies/"+str(oType)+"/"+str(result["id"]))
         return result
 
     def addOntologyByTypeAndID(self,objectID,oType,oID):
@@ -388,28 +388,29 @@ class VSDConnecter:
         if found==0:
             print "Error retrieving segmentation object after upload, aborting"
             sys.exit(0)
-        return segObj
+        return segObjID
 
-    def setOntologyBasedOnReferenceObject(targetObjectID, origObjectID):
+    def setOntologyBasedOnReferenceObject(self,targetObjectID, origObjectID):
         origObject=self.getObject(origObjectID)
 
         #add Ontology relations
         for ontRel in origObject['ontologyItemRelations']:
-            print "retrieving ontolgy for",ontRel
-            print
+            print "retrieving ontolgy for relation ",ontRel
             print
             ont=self.getObjectByUrl(ontRel['selfUrl'])
-            print "found ontology:",ont
-            print
+            print "found ontology relation:",ont
             print
             newOntRel={}
             newOntRel["object"]={"selfUrl":self.url+'/objects/'+str(targetObjectID)}
             newOntRel["type"]=ont["type"]
+            newOntRel["position"]=ont["position"]
             newOntRel["ontologyItem"]=ont["ontologyItem"]
             print "Updated ontology to reflect segmentation object:",newOntRel
             print
+            print "Uploading Ontology"
+            result=self.addOntologyRelation(newOntRel)
+            print "done, result:",result
             print
-            print "Uploading Ontology",self.addOntologyRelation(newOntRel)
             print
             print
        
