@@ -197,7 +197,12 @@ class VSDConnecter:
             #get actual file object
             
             fileObj=self.getObjectByUrl( fileObject['files'][0]['selfUrl'])
-            extension=fileObj['originalFilename'].split(".")[-1]
+            #print fileObject['id']
+            #print fileObj['id']
+            if fileObj['originalFileName']!=None:
+                extension=fileObj['originalFileName'].split(".")[-1]
+            else:
+                extension=".nii"
             sfilename=filename+extension
             if not os.path.exists(sfilename):
                 req=urllib2.Request(fileObj['downloadUrl']) #self.url+"/files/"+str(ID)+"/download")
