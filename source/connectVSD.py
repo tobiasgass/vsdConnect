@@ -50,7 +50,7 @@ class VSDConnecter:
         return req
 
     def getObject(self,ID):
-        print self.url+"/files/"+str(ID)
+        print self.url+"/objects/"+str(ID)
         req=urllib2.Request(self.url+"/objects/"+str(ID))
         self.addAuth(req)
         result=""
@@ -167,10 +167,14 @@ class VSDConnecter:
                 os.makedirs(d)
             
             count=0
+            if fileObject['name']!=None:
+                extension=fileObject['name'].split(".")[-1]
+            else:
+                extension=".dcm"
             for ffile in fileObject['files']:
                 req=urllib2.Request(ffile['selfUrl']+"/download")
                 self.addAuth(req)
-                sfilename=filename+"_"+str(count)+".dcm"
+                sfilename=filename+"_"+str(count)+extension
                 if not os.path.exists(sfilename):
                     print "Downloading",ffile['selfUrl']+"/download","to",sfilename
                     if not dryRun:
@@ -194,8 +198,8 @@ class VSDConnecter:
             fileObj=self.getObjectByUrl( fileObject['files'][0]['selfUrl'])
             #print fileObject['id']
             #print fileObj['id']
-            if fileObj['originalFileName']!=None:
-                extension=fileObj['originalFileName'].split(".")[-1]
+            if fileObject['name']!=None:
+                extension=fileObject['name'].split(".")[-1]
             else:
                 extension=".nii"
             sfilename=filename+extension
