@@ -23,7 +23,7 @@ class Folder:
     containedObjects=None
     level=0
     def getFullName(self):
-        if not self.fullName='':
+        if self.fullName=='':
             if self.parentFolder==None:
                 self.fullName=self.name
                 return self.fullName
@@ -274,10 +274,10 @@ class VSDConnecter:
                     childID=int(child['selfUrl'].split("/")[-1])
                     if (folderHash.has_key(childID)):
                         folderHash[ID].childFolders.append(folderHash[childID])
-                if (folder['parentFolder']!=None):
-                    parentID=int(folder['parentFolder']['selfUrl'].split("/")[-1])
-                    if (folderHash.has_key(parentID)):
-                        folderHash[ID].parentFolder=folderHash[parentID]
+            if (folder['parentFolder']!=None):
+                parentID=int(folder['parentFolder']['selfUrl'].split("/")[-1])
+                if (folderHash.has_key(parentID)):
+                    folderHash[ID].parentFolder=folderHash[parentID]
             if (not folder['containedObjects']==None):
                 folderHash[ID].containedObjects={}
                 for obj in folder['containedObjects']:
@@ -285,7 +285,7 @@ class VSDConnecter:
                     folderHash[ID].containedObjects[objID]=obj['selfUrl']
 
         #third pass: gett full path names in folder hierarchy
-        for folder in folderList['items']:
+        for key, folder in folderHash.iteritems():
             folder.getFullName()
 
         return folderHash
