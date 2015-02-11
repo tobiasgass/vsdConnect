@@ -251,7 +251,7 @@ class VSDConnecter:
             return result
         except urllib2.URLError as err:
             print "Error retrieving file list for folder",ID,"from SMIR:",err
-            #sys.exit()
+            sys.exit()
         
 
     ##read folder list into linked Folder datastructure
@@ -300,7 +300,11 @@ class VSDConnecter:
     def uploadFile(self,filenam):
         #register_openers()
         fields={}
-        files={'file':{ 'filename' : filenam, 'content':open(filenam,"rb").read()}}
+        try:
+            files={'file':{ 'filename' : filenam, 'content':open(filenam,"rb").read()}}
+        except:
+            print "opening file",filenam,"failed, aborting"
+            return
         data,headers=encode_multipart(fields,files)
         req=urllib2.Request(self.url+"/upload",data,headers)
         self.addAuth(req)
