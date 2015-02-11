@@ -16,11 +16,22 @@ from poster import encode_multipart
 
 class Folder:
     name=''
+    fullName=''
     ID=''
     parentFolder=None
     childFolders=None
     containedObjects=None
     level=0
+    def getFullName(self):
+        if not self.fullName='':
+            if self.parentFolder==None:
+                self.fullName=self.name
+                return self.fullName
+            else:
+                self.fullName=self.parentFolder.getFullName()+"/"+self.name
+                return self.fullName
+        else:
+            return self.fullName
 
 class VSDConnecter:
     url='https://www.virtualskeleton.ch/api'
@@ -272,7 +283,11 @@ class VSDConnecter:
                 for obj in folder['containedObjects']:
                     objID=obj['selfUrl'].split("/")[-1]
                     folderHash[ID].containedObjects[objID]=obj['selfUrl']
-                
+
+        #third pass: gett full path names in folder hierarchy
+        for folder in folderList['items']:
+            folder.getFullName()
+
         return folderHash
 
     def getFileIDs(self,fileList):
