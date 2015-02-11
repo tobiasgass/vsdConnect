@@ -352,6 +352,18 @@ class VSDConnecter:
         link={'object1':{'selfurl':self.url+'/objects/'+str(objectID1)} , 'object2':{'selfurl': self.url+'/objects/'+str(objectID2)}}
         return self.postRequest('/object-links',json.dumps(link))
 
+    def getLinkedSegmentation(self,objectID):
+        result=None
+        obj=self.getObject(objectID)
+        print obj['linkedObjects']
+        for link in obj['linkedObjects']:
+            linkedObject=self.getObjectByUrl(link['selfUrl'])
+            print linkedObject['id']
+            if linkedObject['type']==2:
+                result=linkedObject['id']
+        return result
+
+
     def uploadSegmentation(self,segmentationFilename):
        
         #upload Segmentation and get ID
@@ -382,7 +394,7 @@ class VSDConnecter:
         return segObj
 
     def setOntologyBasedOnReferenceObject(targetObjectID, origObjectID):
-         origObject=self.getObject(origObjectID)
+        origObject=self.getObject(origObjectID)
 
         #add Ontology relations
         for ontRel in origObject['ontologyItemRelations']:
