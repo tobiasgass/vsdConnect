@@ -328,7 +328,7 @@ class VSDConnecter:
         else:
             folder['containedObjects']=[]
             folder['containedObjects'].append(entry)
-        print folder
+        #print folder
         return self.putRequest('/folders',json.dumps(folder))
         
 
@@ -395,24 +395,24 @@ class VSDConnecter:
 
         #add Ontology relations
         for ontRel in origObject['ontologyItemRelations']:
-            print "retrieving ontolgy for relation ",ontRel
-            print
+            #print "retrieving ontolgy for relation ",ontRel
+            #print
             ont=self.getObjectByUrl(ontRel['selfUrl'])
-            print "found ontology relation:",ont
-            print
+            #print "found ontology relation:",ont
+            #print
             newOntRel={}
             newOntRel["object"]={"selfUrl":self.url+'/objects/'+str(targetObjectID)}
             newOntRel["type"]=ont["type"]
             newOntRel["position"]=ont["position"]
             newOntRel["ontologyItem"]=ont["ontologyItem"]
-            print "Updated ontology to reflect segmentation object:",newOntRel
-            print
-            print "Uploading Ontology"
+            #print "Updated ontology to reflect segmentation object:",newOntRel
+            #print
+            #print "Uploading Ontology"
             result=self.addOntologyRelation(newOntRel)
-            print "done, result:",result
-            print
-            print
-            print
+            #print "done, result:",result
+            #print
+            #print
+            #print
        
 
     def setRightsBasedOnReferenceObject(self,objectID,referenceObjectID):
@@ -420,19 +420,20 @@ class VSDConnecter:
         referenceObject=self.getObject(referenceObjectID)
         
         #set group rights
+        print "Setting group rights"
         if referenceObject['objectGroupRights'] is not None:
             for right in referenceObject['objectGroupRights']:
             #get object
-                print right
                 rightObject=self.getObjectByUrl(right["selfUrl"])
-            #create new right with the correct objectID
+               #create new right with the correct objectID
                 newRight={}
                 newRight["relatedRights"]=rightObject["relatedRights"]
                 newRight["relatedGroup"]=rightObject["relatedGroup"]
-                newRight["relatedObject"]={"selfUrl":self.url+"/objects"+str(objectID)}
-                self.putRequest("/object-group-rights",json.dumps(newRight))
+                newRight["relatedObject"]={"selfUrl":self.url+"/objects/"+str(objectID)}
+                self.postRequest("/object-group-rights",json.dumps(newRight))
             
         #set user rights
+        print "Setting user rights"
         if referenceObject['objectUserRights'] is not None:
             
             for right in referenceObject['objectUserRights']:
@@ -443,7 +444,7 @@ class VSDConnecter:
                 newRight["relatedRights"]=rightObject["relatedRights"]
                 newRight["relatedUser"]=rightObject["relatedUser"]
                 newRight["relatedObject"]={"selfUrl":self.url+"/objects"+str(objectID)}
-                self.putRequest("/object-user-rights",json.dumps(newRight))
+                self.postRequest("/object-user-rights",json.dumps(newRight))
                                        
         
      
