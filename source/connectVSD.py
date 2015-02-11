@@ -140,9 +140,9 @@ class VSDConnecter:
             print "Error retrieving request",req,"from SMIR:",err
             #sys.exit()
 
-    def generateBaseFilenameFromOntology(self,ID):
+    def generateBaseFilenameFromOntology(self,ID,prefix=""):
         fileObject=self.getObject(ID)
-        filename=""
+        filename=prefix
         for ont in fileObject['ontologyItems']:
             ontology=self.getObjectByUrl(ont['selfUrl'])
             print ontology['term']
@@ -352,10 +352,8 @@ class VSDConnecter:
         link={'object1':{'selfurl':self.url+'/objects/'+str(objectID1)} , 'object2':{'selfurl': self.url+'/objects/'+str(objectID2)}}
         return self.postRequest('/object-links',json.dumps(link))
 
-    def uploadSegmentation(self,objectID,segmentationFilename):
-        #get original Object
-        origObject=self.getObject(objectID)
-
+    def uploadSegmentation(self,segmentationFilename):
+       
         #upload Segmentation and get ID
         segFile=self.uploadFile(segmentationFilename)
         print segFile
@@ -381,15 +379,11 @@ class VSDConnecter:
         if found==0:
             print "Error retrieving segmentation object after upload, aborting"
             sys.exit(0)
-        print segObj
+        return segObj
 
-        #segObj["type"]=2
-        #segObj["
-        #self.putRequest("/objects/"+str(segObjID),json.dumps(segObj))
+    def setOntologyBasedOnReferenceObject(targetObjectID, origObjectID):
+         origObject=self.getObject(origObjectID)
 
-        #link segmentation to original object
-        self.addLink(objectID,segObjID)
- 
         #add Ontology relations
         for ontRel in origObject['ontologyItemRelations']:
             print "retrieving ontolgy for",ontRel
@@ -400,7 +394,7 @@ class VSDConnecter:
             print
             print
             newOntRel={}
-            newOntRel["object"]={"selfUrl":self.url+'/objects/'+str(segObjID)}
+            newOntRel["object"]={"selfUrl":self.url+'/objects/'+str(targetObjectID)}
             newOntRel["type"]=ont["type"]
             newOntRel["ontologyItem"]=ont["ontologyItem"]
             print "Updated ontology to reflect segmentation object:",newOntRel
@@ -409,8 +403,7 @@ class VSDConnecter:
             print "Uploading Ontology",self.addOntologyRelation(newOntRel)
             print
             print
-          
-        return segObjID
+       
 
     def setRightsBasedOnReferenceObject(self,objectID,referenceObjectID):
         #get reference object
