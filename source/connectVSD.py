@@ -4,7 +4,6 @@
 # (c) Tobias Gass, 2015
 
 import sys
-import urllib
 import urllib2
 import base64
 import json
@@ -12,7 +11,6 @@ import os
 import getpass
 
 from poster import encode_multipart
-#from poster.streaminghttp import register_openers
 
 class Folder:
     name=''
@@ -26,12 +24,9 @@ class Folder:
         if self.fullName=='':
             if self.parentFolder==None:
                 self.fullName=self.name
-                return self.fullName
             else:
                 self.fullName=self.parentFolder.getFullName()+"/"+self.name
-                return self.fullName
-        else:
-            return self.fullName
+        return self.fullName
 
 class VSDConnecter:
     url='https://www.virtualskeleton.ch/api'
@@ -355,10 +350,8 @@ class VSDConnecter:
     def getLinkedSegmentation(self,objectID):
         result=None
         obj=self.getObject(objectID)
-        print obj['linkedObjects']
         for link in obj['linkedObjects']:
             linkedObject=self.getObjectByUrl(link['selfUrl'])
-            print linkedObject['id']
             if linkedObject['type']==2:
                 result=linkedObject['id']
         return result

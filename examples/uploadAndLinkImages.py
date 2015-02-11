@@ -3,7 +3,6 @@
 import connectVSD
 import sys
 import argparse
-import json
 
 parser = argparse.ArgumentParser(description='Upload segmentation files to the SMIR to a specific folder, optionally link to source image and create ontology based on a reference segmentation object.')
 parser.add_argument('--targetFolderID', dest='targetFolder', default="./", required=0,
@@ -17,13 +16,16 @@ parser.add_argument('--file', dest='filename', default="./",required=1,
 
 
 args=parser.parse_args()
-#con=connectVSD.VSDConnecter("username","password")
+con=connectVSD.VSDConnecter("username","password")
 #con=connectVSD.VSDConnecter()
 
+segmentationOfOriginalObject=con.getLinkedSegmentation(args.ID)
+if (segmentationOfOriginalObject!=None):
+    print "Segmentation of image already exists, aborting"
+    sys.exit(0)
 
 
 print "Uploading ",args.filename
-#referenceID=57489
 segID=con.uploadSegmentation(int(args.ID),args.filename)
 con.addLink(segID,args.ID)
 print "done"
