@@ -9,12 +9,16 @@ This library implements a client for the REST API of the virtualskeletondatabase
 
 ### How do I get set up? ###
 
-Just add the source directory to your pythonpath
+Just add the source directory to your PYTHONPATH
 
 ### Contribution guidelines ###
 
 * Writing tests
 * Code review
+* Adding sockets/timeouts/retries
+* Adding more stable support for pagination
+* Add general file upload
+* Write some sort of GUI example
 
 ### Who do I talk to? ###
 
