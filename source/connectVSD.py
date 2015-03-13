@@ -170,11 +170,11 @@ class VSDConnecter:
             if fileObject['name']!=None:
                 extension=fileObject['name'].split(".")[-1]
             else:
-                extension=".dcm"
+                extension="dcm"
             for ffile in fileObject['files']:
                 req=urllib2.Request(ffile['selfUrl']+"/download")
                 self.addAuth(req)
-                sfilename=filename+"_"+str(count)+extension
+                sfilename=filename+"_"+str(count)+"."+extension
                 if not os.path.exists(sfilename):
                     print "Downloading",ffile['selfUrl']+"/download","to",sfilename
                     if not dryRun:
@@ -201,8 +201,8 @@ class VSDConnecter:
             if fileObject['name']!=None:
                 extension=fileObject['name'].split(".")[-1]
             else:
-                extension=".nii"
-            sfilename=filename+extension
+                extension="nii"
+            sfilename=filename+"."+extension
             if not os.path.exists(sfilename):
                 req=urllib2.Request(fileObj['downloadUrl']) #self.url+"/files/"+str(ID)+"/download")
                 print "Downloading",fileObj['downloadUrl'],"to",sfilename
