@@ -2,15 +2,16 @@
 
 # connectVSD 0.1
 # (c) Tobias Gass, 2015
+# conncetVSD 0.1 python 3 @Michael Kistler 2015
 
 import sys
-import urllib2
-import base64
-import json
 import os
+import urllib.request, urllib.error, urllib.parse, urllib
+import json
 import getpass
+from pathlib import Path, PurePath, WindowsPath
+import requests
 
-from poster import encode_multipart
 
 class Folder:
     name=''
@@ -29,118 +30,345 @@ class Folder:
         return self.fullName
 
 class VSDConnecter:
-    url='https://www.virtualskeleton.ch/api'
-   
-    def __init__(self,*args):
-        if (len(args)==0):
-            username=raw_input("Username: ")
-            password=getpass.getpass()
-            self.authstr=base64.encodestring(username+":"+password)
-        elif (len(args)==1):
-            self.authstr=args[0]
-        else:
-            self.authstr=base64.encodestring(args[0]+":"+args[1])
-        print "Authed : "+self.authstr 
+    APIURL='https://demo.virtualskeleton.ch/api/'
+
+  
     
-    def seturl(self,url):
-        self.url=url
+    def __init__(self,
+        url = "https://demo.virtualskeleton.ch/api/",
+        username = "demo@virtualskeleton.ch", 
+        password = "demo", 
+        version = ""):
+        
+        self.username = username
+        self.password = password
+        if version:
+            version = str(version) + '/'
+        self.url = url + version
+        
+        self.s = requests.Session()
+        self.s.auth = (self.username, self.password)
+        self.s.verify = False
+        
 
-    def addAuth(self,req):
-        req.add_header("Authorization", "Basic %s" % self.authstr)
-        return req
+ 
+    def getAPIObjectType(self, response):
+        '''create an APIObject depending on the type 
 
-    def getObject(self,ID):
-        print self.url+"/objects/"+str(ID)
-        req=urllib2.Request(self.url+"/objects/"+str(ID))
-        self.addAuth(req)
-        result=""
-        try:
-            result=urllib2.urlopen(req)
-            return json.load(result)
+        :param response: (json) object data
+        :returns: (APIObject) object
+        '''
+        apiObject = APIObject()
+        apiObject.set(obj = response)
+        if apiObject.type == 1:
+            obj = APIObjectRaw()
+        elif apiObject.type == 2:
+            obj = APIObjectSeg()
+        elif apiObject.type == 3:
+            obj = APIObjectSm()
+        elif apiObject.type == 4:
+            obj = APIObjectCtDef()
+        elif apiObject.type == 5:
+            obj = APIObjectCtData()
+        else:
+            obj = APIObject()
+        return obj
 
-        except urllib2.URLError as err:
-            print "Error retrieving object",ID,err
-            #sys.exit()
+    def fullUrl(self, resource):
+        '''
+        check if resource is selfUrl or relative path. a correct full path will be returned 
+        
+        :param resource: (str) to the api resource
+        :returns: (str) the full resource path 
+        '''
+        res = urllib.parse.urlparse(str(resource))
 
-    def getObjectByUrl(self,url):
-        req=urllib2.Request(url)
-        self.addAuth(req)
-        try:
-            result=urllib2.urlopen(req)
-            return json.load(result)
-        except urllib2.URLError as err:
-            print "Error retrieving object",url,err
-            sys.exit()
+        if res.scheme == 'https':
+            return resource
+        else:
+            return self.url + resource
+
+    def getRequest(self, resource, rpp = None, page = None, include = None):
+        '''
+        generic request function
+
+        :param resource: (str) resource path
+        :param rpp: (int) results per page to show
+        :param page: (int) page nr to show, starts with 0
+        :param include: (str) option to include more informations
+        :returns: list of objects (json)
+        '''
+      
+        params = dict([('rpp',rpp),('page',page),('include',include)])
+
+        try: 
+            req = self.s.get(self.fullUrl(resource), params = params)
+            if req.status_code == requests.codes.ok:
+                return req.json()
+            else: 
+                return None
+        except requests.exceptions.RequestException as err:
+            print('request failed:',err)
+            return None
+        
+        
+
+    def getOID(self, selfURL):
+        ''' 
+        extracts the last part of the selfURL, tests if it is a number
+
+        :param selfURL: (str) url to the object
+        :returns: either None if not an ID or the object ID (int)
+        :raises: ValueError
+        '''
+        oID = Path(urllib.parse.urlsplit(selfURL).path).name
+        try: 
+            r = int(oID)
+        except ValueError as err:
+            print('no object ID in the selfUrl {0}. Reason: {1}'.format(selfURL,err))
+            r = None
+        return r
+    
+    def getObject(self, resource):
+        '''retrieve an object based on the objectID'''
+        if isinstance(resource, int):
+            resource = 'objects/' + str(resource)
+
+        res = self.getRequest(resource)
+        obj = self.getAPIObjectType(res)
+        obj.set(obj = res)
+        return obj
+
+    def putObject(self, obj):
+        '''update an objects information
+    
+        :param obj: (APIObject) an API Object
+        :returns: (APIObject) the updated object
+        '''
+        res = self.putRequest(obj.selfUrl, data = obj.get())
+        if not isinstance(res, int):
+            obj.set(obj = res)
+            return obj
+        else:
+            return res
+
+    def getFolder(self, resource):
+        '''retrieve an folder based on the folderID'''
+        
+        res = self.getRequest(self.fullUrl(resource))
+        if not isinstance(res, int):
+            folder = APIFolder()
+            folder.set(obj = res)
+            return folder
+        else:
+            return res
+
+        
+    def optionsRequest(self, resource):
+        '''get list of available OPTIONs for a resource'''
+        req = self.s.options(self.fullUrl(resource))
+        return req.json()        
+
+    def postRequest(self, resource, data):
+        '''add data to an object
+
+        :param resource: (str) relative path of the resource or selfUrl
+        :param data: (json) data to be added to the resource
+        :returns: the resource object (json)
+        '''
+        try:    
+            req = self.s.post(self.fullUrl(resource), json = data)
+            if req.status_code == requests.codes.created:
+                return req.json()
+            else: 
+                return req.status_code
+        except requests.exceptions.RequestException as err:
+            print('request failed:',err)
+            return None
+  
+
+    def putRequest(self, resource, data):
+        ''' update data of an object 
+
+        :param resource: (str) defines the relative path to the api resource
+        :param data: (json) data to be added to the object
+        :returns: the updated object (json)
+        '''
+        try:    
+            req = self.s.put(self.fullUrl(resource), json = data)
+            if req.status_code == requests.codes.ok:
+                return req.json()
+            else: 
+                return req.status_code
+        except requests.exceptions.RequestException as err:
+            print('request failed:',err)
+            return None
        
 
+    def postRequestSimple(self, resource):
+        '''get an empty resource 
+
+        :param resource: (str) relative path of the resource
+        :returns: the resource object (json)
+        '''
+        req = self.s.post(self.fullUrl(resource))
+        return req.json()
+
+    def putRequestSimple(self, resource):
+        req = self.s.put(self.fullUrl(resource))
+        return req.json()
+
+    def delRequest(self, resource):
+        ''' generic delete request'''
+        try: 
+            req = self.s.delete(self.fullUrl(resource))
+            if req.status_code == requests.codes.ok:
+                print('resource {0} deleted'.format(self.fullUrl(resource)))
+                return req.status_code
+            else:
+                print('resource {0} NOT (not existing or other problem) deleted'.format(self.fullUrl(resource)))
+                return req.status_code
+
+        except requests.exceptions.RequestException as err:
+            print('del request failed:',err)
+            return 
+
+    def delObject(self, obj):
+        '''
+        delete an unvalidated object 
+
+        :param obj: (APIObject) to object to delete
+        :returns: status_code
+        '''
+        try: 
+            req = self.s.delete(obj.selfUrl)
+            if req.status_code == requests.codes.ok:
+                print('object {0} deleted'.format(obj.id))
+                return req.status_code
+
+        except requests.exceptions.RequestException as err:
+            print('del request failed:',err)
+            req = None
+
+    def publishObject(self, obj):
+        '''
+        publisch an unvalidated object 
+
+        :param obj: (APIObject) to object to publish
+        :returns: (APIObject) returns the object
+        '''
+        try: 
+            req = self.s.put(obj.selfUrl + '/publish')
+            if req.status_code == requests.codes.ok:
+                print('object {0} published'.format(obj.id))
+                return self.getObject(obj.selfUrl)
+
+
+        except requests.exceptions.RequestException as err:
+            print('del request failed:',err)
+            req = None
+        
+
+    def searchTerm(self, resource, search ,mode = 'default'):
+        ''' search a resource using oAuths
     
-    def getRequest(self,request):
-        req=urllib2.Request(self.url+request)
-        self.addAuth(req)
+        :param resouce: (str) resource path
+        :param search: (str) term to search for 
+        :param mode: (str) search for partial match ('default') or exact match ('exact')
+        :returns: list of folder objects (json)
+        '''
+
+        search = urllib.parse.quote(search)
+        if mode == 'exact':
+            url = self.fullUrl(resource) + '?$filter=Term%20eq%20%27{0}%27'.format(search) 
+        else:
+            url = self.fullUrl(resource) + '?$filter=startswith(Term,%27{0}%27)%20eq%20true'.format(search)
+
+        req = self.s.get(url)
+        return req.json()
+
+
+
+    def uploadFile(self, filename):
+        ''' 
+        push (post) a file to the server
+
+        :param filename: (Path) the file to be uploaded
+        :returns: the file object containing the related object selfUrl
+        :returns: file object (APIObject)
+        '''
         try:
-            result=urllib2.urlopen(req)
-            return json.load(result)
+            data = filename.open(mode = 'rb').read()
+            files  = { 'file' : (str(filename.name), data)}
+        except:
+            print ("opening file", filename, "failed, aborting")
+            return
 
-        except urllib2.URLError as err:
-            print "Error retrieving request",req,"from SMIR:",err
-            #sys.exit()
+        res = self.s.post(self.url + 'upload', files = files)  
+        if res.status_code == requests.codes.created:
+            obj = self.getAPIObjectType(res)
+            obj.set(obj = res)
+            return obj
+        else: 
+            return res.status_code
 
-    def optionsRequest(self,request):
-        req=urllib2.Request(self.url+request)
-        self.addAuth(req)
-        req.get_method = lambda: 'OPTIONS' 
-        try:
-            result=urllib2.urlopen(req).read()
-            return json.load(result)
+    def getFile(self, resource):
+        '''return a APIFile object
+        
+        :param resource: (str) resource path
+        :returns: api file object (APIFile) or status code
+        '''  
+        if isinstance(resource, int):
+            resource = 'files/' + str(resource)
 
-        except urllib2.URLError as err:
-            print "Error retrieving request",req,"from SMIR:",err
-            #sys.exit()
+        res = self.getRequest(resource)
 
-    def postRequest(self,request,data):
-        req=urllib2.Request(self.url+request,data,headers={'Content-Type': 'application/json'})
-        self.addAuth(req)
-        req.get_method = lambda: 'POST' 
-        result=''
-        #print req.get_full_url(), req.header_items()
-        try:
-            result=urllib2.urlopen(req)
-            return json.load(result)
+        if not isinstance(res, int):
+            fObj = APIFile()
+            fObj.set(res)
+            return fObj
+        else: 
+            return res
+  
 
-        except urllib2.URLError as err:
-            print "Error retrieving request",req,"from SMIR:",err
-            #sys.exit()
 
-    def putRequest(self,request,data):
-        req=urllib2.Request(self.url+request,data,headers={'Content-Type': 'application/json'})
-        self.addAuth(req)
-        req.get_method = lambda: 'PUT' 
-       # print req.get_header()
-        try:
-            result=urllib2.urlopen(req)
-            return json.load(result)
-        except urllib2.URLError as err:
-            print "Error putting request",req,"from SMIR:",err
-            #sys.exit()
+    def getObjectFiles(self, obj):
+        '''return a list of file objects contained in an object
 
-    def putRequestSimple(self,request):
-        req=urllib2.Request(self.url+request)
-        self.addAuth(req)
-        req.get_method = lambda: 'PUT' 
-       # print req.get_header()
-        try:
-            result=urllib2.urlopen(req)
-            return json.load(result)
-        except urllib2.URLError as err:
-            print "Error retrieving request",req,"from SMIR:",err
-            #sys.exit()
+        :param obj: (APIObject) object 
+        :returns: list of files(APIFiles)
+        '''
+        filelist = list()
+        for of in obj.files:
+            res = self.getFile(of['selfUrl'])
+            if not isinstance(res, int):
+                filelist.append(res)
+        return filelist
 
-    def generateBaseFilenameFromOntology(self,ID,prefix=""):
+    def fileObjectVersion(self,data):
+        ''' 
+        Extract VSDID and selfUrl of the related Object Version of the file after file upload
+
+        :param data: (json) file object data
+        :results: returns the id and the selfUrl of the Object Version
+        '''
+        #data = json.loads(data)
+        f = data['file']
+        obj = data['relatedObject']
+        fSelfUrl = f['selfUrl']
+        return obj['selfUrl'], self.getOID(obj['selfUrl'])
+
+    def getLatestUnpublishedObject(self):
+        ''' searches the list of unpublished objects and returns the newest object  '''
+        res = self.getRequest('objects/unpublished')
+        obj = self.getObject(res['items'][0].get('selfUrl'))
+        return obj
+
+    def generateBaseFilenameFromOntology(self, ID, prefix = ""):
         fileObject=self.getObject(ID)
         filename=prefix
         for ont in fileObject['ontologyItems']:
             ontology=self.getObjectByUrl(ont['selfUrl'])
-            print ontology['term']
             filename+=ontology['term'].replace(" ","_")
         if filename!="":
             filename+="-"
@@ -148,7 +376,7 @@ class VSDConnecter:
         return filename
 
     
-    def downloadFile(self,ID,filename,dryRun=False):
+    def downloadFile(self, ID, filename, dryRun = False):
         d = os.path.dirname(filename)
         if not os.path.exists(d):
             os.makedirs(d)
@@ -172,93 +400,151 @@ class VSDConnecter:
             else:
                 extension="dcm"
             for ffile in fileObject['files']:
-                req=urllib2.Request(ffile['selfUrl']+"/download")
-                self.addAuth(req)
+                req=urllib.Request(ffile['selfUrl']+"/download")
+                
                 sfilename=filename+"_"+str(count)+"."+extension
                 if not os.path.exists(sfilename):
-                    print "Downloading",ffile['selfUrl']+"/download","to",sfilename
+                    print ("Downloading",ffile['selfUrl']+"/download","to",sfilename)
                     if not dryRun:
                         response=""
                         try:
-                            response=urllib2.urlopen(req)
-                        except urllib2.URLError as err:
-                            print "Error downloading file",ffile['selfUrl'],err
+                            response=urllib.urlopen(req)
+                        except urllib.URLError as err:
+                            print ("Error downloading file",ffile['selfUrl'],err)
                             sys.exit()
                         
                         local_file = open(sfilename, "wb")
                         local_file.write(response.read())
                         local_file.close()
                 else:
-                    print "File",sfilename,"already exists, skipping"
+                    print ("File",sfilename,"already exists, skipping")
                 count+=1
         else:
             #SINGLE FILE
             #get actual file object
             
             fileObj=self.getObjectByUrl( fileObject['files'][0]['selfUrl'])
-            #print fileObject['id']
-            #print fileObj['id']
+            #print (fileObject['id'])
+            #print (fileObj['id'])
             if fileObject['name']!=None:
                 extension=fileObject['name'].split(".")[-1]
             else:
                 extension="nii"
             sfilename=filename+"."+extension
             if not os.path.exists(sfilename):
-                req=urllib2.Request(fileObj['downloadUrl']) #self.url+"/files/"+str(ID)+"/download")
-                print "Downloading",fileObj['downloadUrl'],"to",sfilename
-                self.addAuth(req)
+                req=urllib.Request(fileObj['downloadUrl']) #self.url+"/files/"+str(ID)+"/download")
+                print ("Downloading",fileObj['downloadUrl'],"to",sfilename)
+                
                 response=""
                 if not dryRun:
                     try:
-                        response=urllib2.urlopen(req)
-                    except urllib2.URLError as err:
-                        print "Error downloading file",ffile['selfUrl'],err
+                        response=urllib.urlopen(req)
+                    except urllib.URLError as err:
+                        print ("Error downloading file",ffile['selfUrl'],err)
                         sys.exit()
            
                     local_file = open(sfilename, "wb")
                     local_file.write(response.read())
                     local_file.close()
-            
+                
 
-    def getFolderList(self):
-        #print self.url+"/folders"
-        req=urllib2.Request(self.url+"/folders?rpp=500")
-        self.addAuth(req)
-        result=""
-        try:
-            result=json.load(urllib2.urlopen(req))
-            #result=urllib2.urlopen(req)
-            return result
-        except urllib2.URLError as err:
-            print "Error retrieving folders from SMIR:",err
-            sys.exit()
-    
-    def getFolder(self,ID):
-        #print self.url+"/folders"
-        req=urllib2.Request(self.url+"/folders/"+str(ID))
-        self.addAuth(req)
-        result=""
-        try:
-            result=json.load(urllib2.urlopen(req))
-            return result
-        except urllib2.URLError as err:
-            print "Error retrieving folder",ID," from SMIR:",err
-            sys.exit()
+    def getFolderByName(self, search, mode = 'default'):
+        '''
+        get a list of folder(s) based on a search string
 
-    def getFileListInFolder(self,ID):
-        #print self.url+"/folders"
-        req=urllib2.Request(self.url+"/folders/"+str(ID))
-        self.addAuth(req)
-        result=""
-        try:
-            result=json.load(urllib2.urlopen(req))
+        :param search: (str) term to search for 
+        :param mode: (str) search for partial match ('default') or exact match ('exact')
+        :returns: list of folder objects (APIFolders)
+        '''   
+        search = urllib.parse.quote(search)
+        if mode == 'exact':
+            url = self.url + "folders?$filter=Name%20eq%20%27{0}%27".format(search) 
+        else:
+            url = self.url + "folders?$filter=startswith(Name,%27{0}%27)%20eq%20true".format(search)
+
+        res = self.s.get(url)
+        if res.status_code == requests.codes.ok:
+            result = list()
+            res = res.json()
+            for item in iter(res['items']):
+                f = APIFolder()
+                f.set(item)
+                result.append(f)
             return result
-        except urllib2.URLError as err:
-            print "Error retrieving file list for folder",ID,"from SMIR:",err
-            sys.exit()
+        else:
+            return res.status_code
+
+    def getFileListInFolder(self, ID):
+        ''' not implemented yet '''
+        req = self.s.get(self.url+"folders/"+str(ID))
+        return req.json()
+       
+
+    def searchOntologyTerm(self, search, oType = '0', mode = 'default'):
+        '''
+        Search ontology term in a single ontology resource. Two modes are available to either find the exact term or based on a partial match
+
+        :param search: (str) string to be searched
+        :param oType: (int) ontlogy resouce code, default is FMA (0)
+        :param mode: (str) find exact term (exact) or partial match (default)
+        :returns: ontology term entries (json)
+        '''
+        search = urllib.parse.quote(search)
+        if mode == 'exact':
+            url = self.url+"ontologies/{0}?$filter=Term%20eq%20%27{1}%27".format(oType,search) 
+        else:
+            url = self.url+"ontologies/{0}?$filter=startswith(Term,%27{1}%27)%20eq%20true".format(oType,search)
+
+        res = self.s.get(url)
+        if res.status_code == requests.codes.ok:
+            result = list()
+            res = res.json()
+            for item in iter(res['items']):
+                onto = APIOntology()
+                onto.set(item)
+                result.append(onto)
+            return result
+        else:
+            return res.status_code
+
+
         
+    def getOntologyTermByID(self, oid, oType = "0"):
+        '''
+        Retrieve an ontology entry based on the IRI
 
-    ##read folder list into linked Folder datastructure
+        :param oid: (int) Identifier of the entry
+        :param oType: (int) Resource type, available resources can be found using the OPTIONS on /api/ontologies). Default resouce is FMA (0)
+        :returns: ontology term entry (json)
+        '''
+
+        url = self.url + "ontologies/{0}/{1}".format(oType,oid)
+        req = self.s.get(url)
+        return req.json()
+
+
+    def getLicenseList(self):
+        ''' retrieve a list of the available licenses (APILicense)'''
+        req = self.s.get(self.fullUrl("licenses"))
+        res = req.json()
+        license = list()
+        for item in iter(res['items']):
+            lic = APILicense()
+            lic.set(obj = item)
+            license.append(lic)
+        return license
+
+    def getObjectRightList(self):
+        ''' retrieve a list of the available base object rights (APIObjectRights) '''
+        req = self.s.get(self.fullUrl("object_right_sets")) ##this is wrong
+        res = req.json()
+        permission = list()
+        for item in iter(res['items']):
+            perm = APIPermission()
+            perm.set(obj = item)
+            permission.append(lic)
+        return permission
+
     def readFolders(self,folderList):
     #first pass: create one entry for each folder:
         folderHash={}
@@ -273,7 +559,7 @@ class VSDConnecter:
         for folder in folderList['items']:
             ID=folder['id']
             if (folder['childFolders']!=None):
-            #print folder['childFolders'],ID
+            #print (folder['childFolders'],ID)
                 for child in folder['childFolders']:
                     childID=int(child['selfUrl'].split("/")[-1])
                     if (folderHash.has_key(childID)):
@@ -301,42 +587,22 @@ class VSDConnecter:
             fileIDList.append(ID)
         return fileIDList
 
-    def uploadFile(self,filenam):
-        #register_openers()
-        fields={}
-        try:
-            files={'file':{ 'filename' : filenam, 'content':open(filenam,"rb").read()}}
-        except:
-            print "opening file",filenam,"failed, aborting"
-            return
-        data,headers=encode_multipart(fields,files)
-        req=urllib2.Request(self.url+"/upload",data,headers)
-        self.addAuth(req)
-        try:
-            result=urllib2.urlopen(req)
-            return json.load(result)
-        except urllib2.URLError as err:
-            print "Error uploading",filenam,err
-            #sys.exit()
+
+
 
     def addFileToFolder(self,fileID,folderID):
         #get folder object
         folder=self.getFolder(folderID)
-        entry={'selfUrl' : self.url+'/objects/'+str(fileID)}
+        entry={'selfUrl' : self.url+'objects/'+str(fileID)}
         if folder['containedObjects'] is not None:
             folder['containedObjects'].append(entry)
         else:
             folder['containedObjects']=[]
             folder['containedObjects'].append(entry)
-        #print folder
+        #print (folder)
         return self.putRequest('/folders',json.dumps(folder))
         
 
-    def addOntologyRelation(self,ontologyRelation):
-        oType=ontologyRelation["type"]
-        result=self.postRequest('/object-ontologies/'+str(oType),json.dumps(ontologyRelation))
-        #result2=self.putRequestSimple("/object-ontologies/"+str(oType)+"/"+str(result["id"]))
-        return result
 
     def addOntologyByTypeAndID(self,objectID,oType,oID):
         obj=self.getObject(objectID)
@@ -347,9 +613,21 @@ class VSDConnecter:
         newRel={"position":pos,"type":oType,"object":{"selfUrl":self.url+'/objects/'+str(objectID)},"ontologyItem":{"selfUrl":self.url+"/ontologies/"+str(oType)+"/"+str(oId)}}
         return self.addOntologyRelation(newRel)
             
-    def addLink(self,objectID1,objectID2):
-        link={'object1':{'selfurl':self.url+'/objects/'+str(objectID1)} , 'object2':{'selfurl': self.url+'/objects/'+str(objectID2)}}
-        return self.postRequest('/object-links',json.dumps(link))
+    def addLink(self, obj1, obj2):
+        ''' add a object link 
+
+        :param obj1: (APIBasic) an link object with selfUrl 
+        :param obj2: (APIBasic) an link object with selfUrl
+        :returns: the created object-link (json)
+        '''
+        link = APIObjectLink()
+        link.object1 = dict([('selfUrl', obj1.selfUrl)])
+        link.object2 = dict([('selfUrl', obj2.selfUrl)])
+        
+        return  self.postRequest('object-links', data = link.get())
+
+
+
 
     def getLinkedSegmentation(self,objectID):
         result=None
@@ -365,20 +643,20 @@ class VSDConnecter:
        
         #upload Segmentation and get ID
         segFile=self.uploadFile(segmentationFilename)
-        print segFile
-        print 
-        print
+        print (segFile)
+        print ()
+        print ()
         segObjID=int(segFile["relatedObject"]["selfUrl"].split("/")[-1])
         segObj=self.getObject(segObjID)
-        print segObj
-        print 
-        print
+        print (segObj)
+        print ()
+        print ()
         #check if object is segmentation
         maxTries=3
         found=0
         for i in range(maxTries):
             if segObj['type']==2 and segObj['files'][0]['selfUrl']==segFile['file']['selfUrl']:
-                print "Found segmentation object with ID",segObj["id"]
+                print ("Found segmentation object with ID",segObj["id"])
                 found=1
                 break
             else:
@@ -386,7 +664,7 @@ class VSDConnecter:
                 segObj=self.getObject(segObjID)
 
         if found==0:
-            print "Error retrieving segmentation object after upload, aborting"
+            print ("Error retrieving segmentation object after upload, aborting")
             sys.exit(0)
         return segObjID
 
@@ -395,24 +673,24 @@ class VSDConnecter:
 
         #add Ontology relations
         for ontRel in origObject['ontologyItemRelations']:
-            #print "retrieving ontolgy for relation ",ontRel
-            #print
+            #print ("retrieving ontolgy for relation ",ontRel)
+            #print ()
             ont=self.getObjectByUrl(ontRel['selfUrl'])
-            #print "found ontology relation:",ont
-            #print
+            #print ("found ontology relation:",ont)
+            #print ()
             newOntRel={}
             newOntRel["object"]={"selfUrl":self.url+'/objects/'+str(targetObjectID)}
             newOntRel["type"]=ont["type"]
             newOntRel["position"]=ont["position"]
             newOntRel["ontologyItem"]=ont["ontologyItem"]
-            #print "Updated ontology to reflect segmentation object:",newOntRel
-            #print
-            #print "Uploading Ontology"
+            #print ("Updated ontology to reflect segmentation object:",newOntRel)
+            #print ()
+            #print ("Uploading Ontology")
             result=self.addOntologyRelation(newOntRel)
-            #print "done, result:",result
-            #print
-            #print
-            #print
+            #print ("done, result:",result)
+            #print ()
+            #print ()
+            #print ()
        
 
     def setRightsBasedOnReferenceObject(self,objectID,referenceObjectID):
@@ -420,7 +698,7 @@ class VSDConnecter:
         referenceObject=self.getObject(referenceObjectID)
         
         #set group rights
-        print "Setting group rights"
+        print ("Setting group rights")
         if referenceObject['objectGroupRights'] is not None:
             for right in referenceObject['objectGroupRights']:
             #get object
@@ -433,7 +711,7 @@ class VSDConnecter:
                 self.postRequest("/object-group-rights",json.dumps(newRight))
             
         #set user rights
-        print "Setting user rights"
+        print ("Setting user rights")
         if referenceObject['objectUserRights'] is not None:
             
             for right in referenceObject['objectUserRights']:
@@ -445,11 +723,462 @@ class VSDConnecter:
                 newRight["relatedUser"]=rightObject["relatedUser"]
                 newRight["relatedObject"]={"selfUrl":self.url+"/objects"+str(objectID)}
                 self.postRequest("/object-user-rights",json.dumps(newRight))
-                                       
-        
-     
-        
+    
+    def createFolderStructure(self, rootfolder, filepath, parents):
+        ''' 
+        creates the folders based on the filepath if not already existing, 
+        starting from the rootfolder
 
+        :param rootfolder: (APIFolder) the root folder
+        :param filepath: (Path) file path of the file
+        :param parents: (int) number of partent levels to create from file folder 
+        :returns: (APIFolder) the last folder in the tree
+        '''
+         
+        fp = filepath.resolve()
+        folders = list(fp.parts)
+        folders.reverse()
+
+        ##remove file from list
+        if fp.is_file():
+           folders.remove(folders[0])
+            
+        for i in range (parents, len(folders)):
+            folders.remove(folders[i])
+
+        folders.reverse()
+        fparent = rootfolder
+        #fparent = APIFolder(self.getRequest(rootfolder))
+
+        if fparent:
+            for fname in folders:
+                fchild = None
+                if fparent:
+                    if fparent.childFolders:
+                        for child in fparent.childFolders:
+                            obj = self.getRequest(child['selfUrl'])
+                            if obj['name'] == fname:
+                                fchild = APIFolder()
+                                fchild.set(obj = obj)
+                if not fchild:
+                    f = APIFolder()
+                    f.name = fname
+                    f.parentFolder = dict([('selfUrl',fparent.selfUrl)])
+                   # f.toJson()
+                    res = self.postRequest('folders', f.get())
+                    fparent.set(obj = res)
+                    
+                else:
+                    fparent = fchild
+                   
+            return fparent
+        else: 
+            print('Root folder does not exist', rootfolder)
+            #jData = jFolder(folder)
+            return None
+
+
+
+    def addObjectToFolder(self, target, obj):
+        '''
+        add an object to the folder
+    
+        :param target: (APIFolder) the target folder 
+        :param obj: (APIObject) the object to copy
+        :returns: updated folder (APIFolder)
+        '''    
+        objSelfUrl = dict([('selfUrl',obj.selfUrl,)])
+        objects = target.containedObjects
+        if not objects:
+            objects = list()
+        if objects.count(objSelfUrl) == 0:
+            objects.append(objSelfUrl)
+            target.containedObjects = objects
+            res = self.putRequest('folders/', data = target.get())
+            if not isinstance(res, int):
+                target = APIFolder()
+                target.set(obj = res)
+                return target
+            else:
+                return res
+        else:
+            return target
+
+        
+        
+class APIBasic(object):
+    """docstring for APIBasic"""
+
+
+    oKeys = list([
+        'id',
+        'selfUrl',
+        ])
+
+    def __init__(self, oKeys = oKeys):
+        for v in oKeys:
+                setattr(self, v, None)
+        
+    def set(self, obj = None):
+        ''' sets class variable for each key in the object to the keyname and its value'''
+        if  obj:
+            for v in self.oKeys:
+                if v in obj: 
+                    setattr(self, v, obj[v])              
+        else:
+            for v in self.oKeys:
+                setattr(self, v, None)
+
+    def get(self):
+        '''transforms the class object into a json readable dict'''
+        return self.__dict__
+
+
+class APIObject(APIBasic):
+    '''
+    API Object
+    ''' 
+    oKeys = list([
+        'name',
+        'type',
+        'description',
+        'objectGroupRights',
+        'objectUserRights',
+        'objectPreviews',
+        'createdDate',
+        'modality',
+        'ontologyItems',
+        'ontologyItemRelations',
+        'ontologyCount',
+        'license',
+        'files',
+        'linkedObjects',
+        'linkedObjectRelations',
+        'downloadUrl'
+        ])
+
+    for i in APIBasic.oKeys:
+        oKeys.append(i)
+
+    def __init__(self, ):
+        super(APIObject, self).__init__(self.oKeys) 
+
+    def set(self, obj = None):
+        super(APIObject, self).set(obj = obj)
+
+    def get(self):
+        '''transforms the class object into a json readable dict'''
+        return super(APIObject, self).get()
+
+
+class APIObjectRaw(APIObject):
+    """docstring for APIObjectRaw"""
+    oKeys = list([
+        'sliceThickness',
+        'spaceBetweenSlices',
+        'kilovoltPeak'
+        ])
+
+    for i in APIObject.oKeys:
+        oKeys.append(i)
+
+    def __init__(self):
+        super(APIObject, self).__init__(self.oKeys) 
+
+    def set(self, obj = None):
+        super(APIObject, self).set(obj = obj)
+
+    def get(self):
+        '''transforms the class object into a json readable dict'''
+        return super(APIObject, self).get()
+
+class APIObjectSeg(APIObject):
+    """docstring for APIObjectSeg"""
+    oKeys = list([
+        'sliceThickness',
+        'spaceBetweenSlices',
+        'kilovoltPeak'
+        ])
+    
+
+    for i in APIObject.oKeys:
+        oKeys.append(i)
+
+    def __init__(self):
+        super(APIObject, self).__init__(self.oKeys) 
+
+    def set(self, obj = None):
+        super(APIObject, self).set(obj = obj)
+
+    def get(self):
+        '''transforms the class object into a json readable dict'''
+        return super(APIObject, self).get()
+
+class APIObjectSm(APIObject):
+    """docstring for APIObjectSm"""
+    oKeys = list()
+
+    for i in APIObject.oKeys:
+        oKeys.append(i)
+
+    def __init__(self):
+        super(APIObject, self).__init__(self.oKeys) 
+
+    def set(self, obj = None):
+        super(APIObject, self).set(obj = obj)
+
+    def get(self):
+        '''transforms the class object into a json readable dict'''
+        return super(APIObject, self).get()
+
+class APIObjectCtDef(APIObject):
+    """docstring for APIObjectCtDef"""
+    oKeys = list()
+
+    for i in APIObject.oKeys:
+        oKeys.append(i)
+
+    def __init__(self):
+        super(APIObject, self).__init__(self.oKeys) 
+
+    def set(self, obj = None):
+        super(APIObject, self).set(obj = obj)
+
+    def get(self):
+        '''transforms the class object into a json readable dict'''
+        return super(APIObject, self).get()
+
+class APIObjectCtData(APIObject):
+    """docstring for APIObjectCtData"""
+    oKeys = list()
+
+    for i in APIObject.oKeys:
+        oKeys.append(i)
+
+    def __init__(self):
+        super(APIObject, self).__init__(self.oKeys) 
+
+    def set(self, obj = None):
+        super(APIObject, self).set(obj = obj)
+
+    def get(self):
+        '''transforms the class object into a json readable dict'''
+        return super(APIObject, self).get()
+
+
+
+class APIFolder(APIBasic):
+    '''
+    Folder API Object
+    '''
+    oKeys = list([
+        'name',
+        'level',
+        'parentFolder',
+        'childFolders',
+        'folderGroupRights',
+        'folderUserRights',
+        'containedObjects'
+        ])
+
+    for i in APIBasic.oKeys:
+        oKeys.append(i)
+
+    def __init__(self):
+        super(APIFolder, self).__init__(self.oKeys) 
+
+    def set(self, obj = None):
+        super(APIFolder, self).set(obj = obj)
+
+    def get(self):
+        '''transforms the class object into a json readable dict'''
+        return super(APIFolder, self).get()
+  
+class APIOntology(APIBasic):
+    '''
+    API class for ontology entries
+    '''
+    oKeys = list([
+        'term',
+        'type',
+        ])
+
+    for i in APIBasic.oKeys:
+        oKeys.append(i)
+
+    def __init__(self):
+        super(APIOntology, self).__init__(self.oKeys) 
+
+    def set(self, obj = None):
+        super(APIOntology, self).set(obj = obj)
+
+    def get(self):
+        '''transforms the class object into a json readable dict'''
+        return super(APIOntology, self).get()
+
+class APIObjectOntology(APIBasic):
+    '''
+    API class for object-ontology entries
+    '''
+    oKeys = list([
+        'type',
+        'object',
+        'ontologyItem',
+        'position'
+        ])
+
+    for i in APIBasic.oKeys:
+        oKeys.append(i)
+
+    def __init__(self):
+        super(APIObjectOntology, self).__init__(self.oKeys) 
+
+    def set(self, obj = None):
+        super(APIObjectOntology, self).set(obj = obj)
+
+    def get(self):
+        '''transforms the class object into a json readable dict'''
+        return super(APIObjectOntology, self).get()
+
+class APIFile(APIBasic):
+    '''
+    API class for files
+    '''
+    oKeys = list([
+        'createdDate',
+        'downloadUrl',
+        'originalFileName',
+        'anonymizedFileHashCode',
+        'size',
+        'fileHashCode'
+        ])
+
+    for i in APIBasic.oKeys:
+        oKeys.append(i)
+
+    def __init__(self):
+        super(APIFile, self).__init__(self.oKeys) 
+
+    def set(self, obj = None):
+        super(APIFile, self).set(obj = obj)
+
+    def get(self):
+        '''transforms the class object into a json readable dict'''
+        return super(APIFile, self).get()
+
+
+
+class APILicense(APIBasic):
+    '''
+    API class for licenses
+    '''
+    oKeys = list([
+        'description',
+        'name',
+        ])
+
+    for i in APIBasic.oKeys:
+        oKeys.append(i)
+
+    def __init__(self):
+        super(APILicense, self).__init__(self.oKeys) 
+
+    def set(self, obj = None):
+        super(APILicense, self).set(obj = obj)
+
+    def get(self):
+        '''transforms the class object into a json readable dict'''
+        return super(APILicense, self).get()
+
+class APIObjecRight(APIBasic):
+    '''
+    API class for object rights
+    '''
+    oKeys = list([
+        'description',
+        'name',
+        ])
+
+    for i in APIBasic.oKeys:
+        oKeys.append(i)
+
+    def __init__(self):
+        super(APIObjecRight, self).__init__(self.oKeys) 
+
+    def set(self, obj = None):
+        super(APIObjecRight, self).set(obj = obj)
+
+    def get(self):
+        '''transforms the class object into a json readable dict'''
+        return super(APIObjecRight, self).get()
+   
+
+class APIObjectLink(APIBasic):
+    '''
+    API class for object links
+    '''
+    oKeys = list([
+        'description',
+        'object1',
+        'object2',
+        ])
+
+    for i in APIBasic.oKeys:
+        oKeys.append(i)
+
+    def __init__(self):
+        super(APIObjectLink, self).__init__(self.oKeys) 
+
+    def set(self, obj = None):
+        super(APIObjectLink, self).set(obj = obj)
+
+    def get(self):
+        '''transforms the class object into a json readable dict'''
+        return super(APIObjectLink, self).get()
+                                    
+
+############################################## 
+class APIDecoder(json.JSONDecoder):
+    def __init__(self, json_string):
+    #def decode(self,json_string):
+        """
+        json_string is basicly string that you give to json.loads method
+        """
+        default_obj = super(APIDecoder,self).decode(str(json_string))
+
+        # manipulate your object any way you want
+        # ....
+
+        return default_obj
+
+class Struct(object):
+    """docstring for Struct"""
+    def __init__(self, oKeys):
+        for v in oKeys:
+            setattr(self, v, None)
+            
+    def set(self, obj, oKeys):
+        if  obj:
+            for v in oKeys:
+                if v in obj: 
+                    setattr(self, v, obj[v])
+                    
+        else:
+            for v in self.oKeys:
+                setattr(self, v, None)
+
+        return(self)
+
+    def get(self):
+        '''transforms the class object into a json readable dict'''
+        return json.dumps(self.__dict__, indent = 4)
 
  
-                                           
+class APIGeneric(VSDConnecter):
+    def __init__(self, j):
+        self.__dict__ = j
+
+    def toDict(self):
+        return self.__dict__
+
+
