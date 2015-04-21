@@ -6,6 +6,7 @@ This library implements a client for the REST API of the virtualskeletondatabase
 - Pyhton 3 (3.4.3)
 - usage of **requests** package instead of urllib2
 - usage of **pathlib** instead of os.path
+- support file poster.py removed (no needed with requests)
 - introduction of API classes
  
 
