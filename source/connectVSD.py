@@ -12,22 +12,8 @@ import getpass
 from pathlib import Path, PurePath, WindowsPath
 import requests
 
+requests.packages.urllib3.disable_warnings()
 
-class Folder:
-    name=''
-    fullName=''
-    ID=''
-    parentFolder=None
-    childFolders=None
-    containedObjects=None
-    level=0
-    def getFullName(self):
-        if self.fullName=='':
-            if self.parentFolder==None:
-                self.fullName=self.name
-            else:
-                self.fullName=self.parentFolder.getFullName()+"/"+self.name
-        return self.fullName
 
 class VSDConnecter:
     APIURL='https://demo.virtualskeleton.ch/api/'
@@ -96,19 +82,19 @@ class VSDConnecter:
         :param rpp: (int) results per page to show
         :param page: (int) page nr to show, starts with 0
         :param include: (str) option to include more informations
-        :returns: list of objects (json)
+        :returns: list of objects (json) or None
         '''
       
-        params = dict([('rpp',rpp),('page',page),('include',include)])
+        params = dict([('rpp', rpp),('page', page),('include', include)])
 
         try: 
-            req = self.s.get(self.fullUrl(resource), params = params)
-            if req.status_code == requests.codes.ok:
-                return req.json()
+            res = self.s.get(self.fullUrl(resource), params = params)
+            if res.status_code == requests.codes.ok:
+                return res.json()
             else: 
                 return None
         except requests.exceptions.RequestException as err:
-            print('request failed:',err)
+            print('request failed:', err)
             return None
         
         
@@ -130,14 +116,21 @@ class VSDConnecter:
         return r
     
     def getObject(self, resource):
-        '''retrieve an object based on the objectID'''
+        '''retrieve an object based on the objectID
+
+        :param resource: (str) selfUrl of the object or the (int) object ID
+        :returns: the object (APIObject) 
+        '''
         if isinstance(resource, int):
             resource = 'objects/' + str(resource)
 
         res = self.getRequest(resource)
-        obj = self.getAPIObjectType(res)
-        obj.set(obj = res)
-        return obj
+        if res:
+            obj = self.getAPIObjectType(res)
+            obj.set(obj = res)
+            return obj
+        else:
+            return res
 
     def putObject(self, obj):
         '''update an objects information
@@ -146,17 +139,24 @@ class VSDConnecter:
         :returns: (APIObject) the updated object
         '''
         res = self.putRequest(obj.selfUrl, data = obj.get())
-        if not isinstance(res, int):
+        if res:
+            obj = self.getAPIObjectType(res)
             obj.set(obj = res)
             return obj
         else:
             return res
 
     def getFolder(self, resource):
-        '''retrieve an folder based on the folderID'''
-        
-        res = self.getRequest(self.fullUrl(resource))
-        if not isinstance(res, int):
+        '''retrieve an folder based on the folderID
+
+        :param resource: (str) selfUrl of the folder or the (int) folder ID
+        :returns: the folder (APIFolder) 
+        '''
+        if isinstance(resource, int):
+            resource = 'folders/' + str(resource)
+
+        res = self.getRequest(resource)
+        if res:
             folder = APIFolder()
             folder.set(obj = res)
             return folder
@@ -181,7 +181,7 @@ class VSDConnecter:
             if req.status_code == requests.codes.created:
                 return req.json()
             else: 
-                return req.status_code
+                return None
         except requests.exceptions.RequestException as err:
             print('request failed:',err)
             return None
@@ -199,7 +199,7 @@ class VSDConnecter:
             if req.status_code == requests.codes.ok:
                 return req.json()
             else: 
-                return req.status_code
+                return None
         except requests.exceptions.RequestException as err:
             print('request failed:',err)
             return None
@@ -208,7 +208,7 @@ class VSDConnecter:
     def postRequestSimple(self, resource):
         '''get an empty resource 
 
-        :param resource: (str) relative path of the resource
+        :param resource: (str) resource path
         :returns: the resource object (json)
         '''
         req = self.s.post(self.fullUrl(resource))
@@ -219,7 +219,11 @@ class VSDConnecter:
         return req.json()
 
     def delRequest(self, resource):
-        ''' generic delete request'''
+        ''' generic delete request
+
+        :param resource: (str) resource path
+        :returns: status_code (int)
+        '''
         try: 
             req = self.s.delete(self.fullUrl(resource))
             if req.status_code == requests.codes.ok:
@@ -361,91 +365,11 @@ class VSDConnecter:
     def getLatestUnpublishedObject(self):
         ''' searches the list of unpublished objects and returns the newest object  '''
         res = self.getRequest('objects/unpublished')
+
         obj = self.getObject(res['items'][0].get('selfUrl'))
         return obj
 
-    def generateBaseFilenameFromOntology(self, ID, prefix = ""):
-        fileObject=self.getObject(ID)
-        filename=prefix
-        for ont in fileObject['ontologyItems']:
-            ontology=self.getObjectByUrl(ont['selfUrl'])
-            filename+=ontology['term'].replace(" ","_")
-        if filename!="":
-            filename+="-"
-        filename+=str(ID)
-        return filename
-
-    
-    def downloadFile(self, ID, filename, dryRun = False):
-        d = os.path.dirname(filename)
-        if not os.path.exists(d):
-            os.makedirs(d)
-
-        fileObject=self.getObject(ID)
-       
-
-        #return filename
-        #if (fileObject['type']==1):
-        if (len(fileObject['files'])>1):
-            #DICOM
-            ##create directory
-            filename+="/"+os.path.basename(filename)
-            d = os.path.dirname(filename)
-            if not os.path.exists(d):
-                os.makedirs(d)
-            
-            count=0
-            if fileObject['name']!=None:
-                extension=fileObject['name'].split(".")[-1]
-            else:
-                extension="dcm"
-            for ffile in fileObject['files']:
-                req=urllib.Request(ffile['selfUrl']+"/download")
-                
-                sfilename=filename+"_"+str(count)+"."+extension
-                if not os.path.exists(sfilename):
-                    print ("Downloading",ffile['selfUrl']+"/download","to",sfilename)
-                    if not dryRun:
-                        response=""
-                        try:
-                            response=urllib.urlopen(req)
-                        except urllib.URLError as err:
-                            print ("Error downloading file",ffile['selfUrl'],err)
-                            sys.exit()
-                        
-                        local_file = open(sfilename, "wb")
-                        local_file.write(response.read())
-                        local_file.close()
-                else:
-                    print ("File",sfilename,"already exists, skipping")
-                count+=1
-        else:
-            #SINGLE FILE
-            #get actual file object
-            
-            fileObj=self.getObjectByUrl( fileObject['files'][0]['selfUrl'])
-            #print (fileObject['id'])
-            #print (fileObj['id'])
-            if fileObject['name']!=None:
-                extension=fileObject['name'].split(".")[-1]
-            else:
-                extension="nii"
-            sfilename=filename+"."+extension
-            if not os.path.exists(sfilename):
-                req=urllib.Request(fileObj['downloadUrl']) #self.url+"/files/"+str(ID)+"/download")
-                print ("Downloading",fileObj['downloadUrl'],"to",sfilename)
-                
-                response=""
-                if not dryRun:
-                    try:
-                        response=urllib.urlopen(req)
-                    except urllib.URLError as err:
-                        print ("Error downloading file",ffile['selfUrl'],err)
-                        sys.exit()
-           
-                    local_file = open(sfilename, "wb")
-                    local_file.write(response.read())
-                    local_file.close()
+   
                 
 
     def getFolderByName(self, search, mode = 'default'):
@@ -525,24 +449,25 @@ class VSDConnecter:
 
     def getLicenseList(self):
         ''' retrieve a list of the available licenses (APILicense)'''
-        req = self.s.get(self.fullUrl("licenses"))
-        res = req.json()
+        res = self.s.getRequest('licenses')
         license = list()
-        for item in iter(res['items']):
-            lic = APILicense()
-            lic.set(obj = item)
-            license.append(lic)
+        if res:
+            for item in iter(res['items']):
+                lic = APILicense()
+                lic.set(obj = item)
+                license.append(lic)
         return license
 
     def getObjectRightList(self):
         ''' retrieve a list of the available base object rights (APIObjectRights) '''
-        req = self.s.get(self.fullUrl("object_right_sets")) ##this is wrong
-        res = req.json()
+        res = self.s.getRequest('object_rights')
         permission = list()
-        for item in iter(res['items']):
-            perm = APIPermission()
-            perm.set(obj = item)
-            permission.append(lic)
+        if res:
+            for item in iter(res['items']):
+                perm = APIPermission()
+                perm.set(obj = item)
+                permission.append(lic)
+        
         return permission
 
     def readFolders(self,folderList):
@@ -580,38 +505,6 @@ class VSDConnecter:
 
         return folderHash
 
-    def getFileIDs(self,fileList):
-        fileIDList=[]
-        for fileObject in fileList['containedObjects']:
-            ID=fileObject['selfUrl'].split("/")[-1]
-            fileIDList.append(ID)
-        return fileIDList
-
-
-
-
-    def addFileToFolder(self,fileID,folderID):
-        #get folder object
-        folder=self.getFolder(folderID)
-        entry={'selfUrl' : self.url+'objects/'+str(fileID)}
-        if folder['containedObjects'] is not None:
-            folder['containedObjects'].append(entry)
-        else:
-            folder['containedObjects']=[]
-            folder['containedObjects'].append(entry)
-        #print (folder)
-        return self.putRequest('/folders',json.dumps(folder))
-        
-
-
-    def addOntologyByTypeAndID(self,objectID,oType,oID):
-        obj=self.getObject(objectID)
-        pos=0
-        if obj['ontologyItemRelations'] is not None:
-            pos=len(obj['ontologyItemRelations'])
-
-        newRel={"position":pos,"type":oType,"object":{"selfUrl":self.url+'/objects/'+str(objectID)},"ontologyItem":{"selfUrl":self.url+"/ontologies/"+str(oType)+"/"+str(oId)}}
-        return self.addOntologyRelation(newRel)
             
     def addLink(self, obj1, obj2):
         ''' add a object link 
@@ -629,100 +522,7 @@ class VSDConnecter:
 
 
 
-    def getLinkedSegmentation(self,objectID):
-        result=None
-        obj=self.getObject(objectID)
-        for link in obj['linkedObjects']:
-            linkedObject=self.getObjectByUrl(link['selfUrl'])
-            if linkedObject['type']==2:
-                result=linkedObject['id']
-        return result
 
-
-    def uploadSegmentation(self,segmentationFilename):
-       
-        #upload Segmentation and get ID
-        segFile=self.uploadFile(segmentationFilename)
-        print (segFile)
-        print ()
-        print ()
-        segObjID=int(segFile["relatedObject"]["selfUrl"].split("/")[-1])
-        segObj=self.getObject(segObjID)
-        print (segObj)
-        print ()
-        print ()
-        #check if object is segmentation
-        maxTries=3
-        found=0
-        for i in range(maxTries):
-            if segObj['type']==2 and segObj['files'][0]['selfUrl']==segFile['file']['selfUrl']:
-                print ("Found segmentation object with ID",segObj["id"])
-                found=1
-                break
-            else:
-                segObjID+=1
-                segObj=self.getObject(segObjID)
-
-        if found==0:
-            print ("Error retrieving segmentation object after upload, aborting")
-            sys.exit(0)
-        return segObjID
-
-    def setOntologyBasedOnReferenceObject(self,targetObjectID, origObjectID):
-        origObject=self.getObject(origObjectID)
-
-        #add Ontology relations
-        for ontRel in origObject['ontologyItemRelations']:
-            #print ("retrieving ontolgy for relation ",ontRel)
-            #print ()
-            ont=self.getObjectByUrl(ontRel['selfUrl'])
-            #print ("found ontology relation:",ont)
-            #print ()
-            newOntRel={}
-            newOntRel["object"]={"selfUrl":self.url+'/objects/'+str(targetObjectID)}
-            newOntRel["type"]=ont["type"]
-            newOntRel["position"]=ont["position"]
-            newOntRel["ontologyItem"]=ont["ontologyItem"]
-            #print ("Updated ontology to reflect segmentation object:",newOntRel)
-            #print ()
-            #print ("Uploading Ontology")
-            result=self.addOntologyRelation(newOntRel)
-            #print ("done, result:",result)
-            #print ()
-            #print ()
-            #print ()
-       
-
-    def setRightsBasedOnReferenceObject(self,objectID,referenceObjectID):
-        #get reference object
-        referenceObject=self.getObject(referenceObjectID)
-        
-        #set group rights
-        print ("Setting group rights")
-        if referenceObject['objectGroupRights'] is not None:
-            for right in referenceObject['objectGroupRights']:
-            #get object
-                rightObject=self.getObjectByUrl(right["selfUrl"])
-               #create new right with the correct objectID
-                newRight={}
-                newRight["relatedRights"]=rightObject["relatedRights"]
-                newRight["relatedGroup"]=rightObject["relatedGroup"]
-                newRight["relatedObject"]={"selfUrl":self.url+"/objects/"+str(objectID)}
-                self.postRequest("/object-group-rights",json.dumps(newRight))
-            
-        #set user rights
-        print ("Setting user rights")
-        if referenceObject['objectUserRights'] is not None:
-            
-            for right in referenceObject['objectUserRights']:
-            #get object
-                rightObject=self.getObjectByUrl(right["selfUrl"])
-            #create new right with the correct objectID
-                newRight={}
-                newRight["relatedRights"]=rightObject["relatedRights"]
-                newRight["relatedUser"]=rightObject["relatedUser"]
-                newRight["relatedObject"]={"selfUrl":self.url+"/objects"+str(objectID)}
-                self.postRequest("/object-user-rights",json.dumps(newRight))
     
     def createFolderStructure(self, rootfolder, filepath, parents):
         ''' 
@@ -748,7 +548,6 @@ class VSDConnecter:
 
         folders.reverse()
         fparent = rootfolder
-        #fparent = APIFolder(self.getRequest(rootfolder))
 
         if fparent:
             for fname in folders:
@@ -756,10 +555,11 @@ class VSDConnecter:
                 if fparent:
                     if fparent.childFolders:
                         for child in fparent.childFolders:
-                            obj = self.getRequest(child['selfUrl'])
-                            if obj['name'] == fname:
+                            fold = self.getFolder(child['selfUrl'])
+                            if fold.name == fname:
                                 fchild = APIFolder()
-                                fchild.set(obj = obj)
+                                #fchild.set(obj = fold.get())
+                                fchild = fold
                 if not fchild:
                     f = APIFolder()
                     f.name = fname
@@ -1137,48 +937,5 @@ class APIObjectLink(APIBasic):
         return super(APIObjectLink, self).get()
                                     
 
-############################################## 
-class APIDecoder(json.JSONDecoder):
-    def __init__(self, json_string):
-    #def decode(self,json_string):
-        """
-        json_string is basicly string that you give to json.loads method
-        """
-        default_obj = super(APIDecoder,self).decode(str(json_string))
-
-        # manipulate your object any way you want
-        # ....
-
-        return default_obj
-
-class Struct(object):
-    """docstring for Struct"""
-    def __init__(self, oKeys):
-        for v in oKeys:
-            setattr(self, v, None)
-            
-    def set(self, obj, oKeys):
-        if  obj:
-            for v in oKeys:
-                if v in obj: 
-                    setattr(self, v, obj[v])
-                    
-        else:
-            for v in self.oKeys:
-                setattr(self, v, None)
-
-        return(self)
-
-    def get(self):
-        '''transforms the class object into a json readable dict'''
-        return json.dumps(self.__dict__, indent = 4)
-
- 
-class APIGeneric(VSDConnecter):
-    def __init__(self, j):
-        self.__dict__ = j
-
-    def toDict(self):
-        return self.__dict__
 
 
