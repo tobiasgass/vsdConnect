@@ -96,8 +96,34 @@ class VSDConnecter:
         except requests.exceptions.RequestException as err:
             print('request failed:', err)
             return None
-        
-        
+    
+
+    def getAllPaginated(self, resource, itemlist = list()):
+        '''
+        returns all items as list 
+
+        :param resource: (str) resource path
+        :param itemlist: (list) of items
+        :returns: list of items
+        '''
+        res = self.getRequest(resource)
+        if res:
+            page = APIPagination()
+            page.set(obj = res)
+            print('nextpageurl:', page.nextPageUrl)
+            print('itemlist len', len(itemlist))
+            for item in page.items:
+                print('add item')
+                itemlist.append(item)
+            print('itemlist len', len(itemlist))
+            if page.nextPageUrl:
+                print('another page', page.nextPageUrl)
+                return self.getAllPaginated(page.nextPageUrl, itemlist = itemlist)
+            else:
+                print('else return itemlist')
+                return itemlist
+        else: 
+            return itemlist
 
     def getOID(self, selfURL):
         ''' 
@@ -695,9 +721,8 @@ class APIObjectRaw(APIObject):
 class APIObjectSeg(APIObject):
     """docstring for APIObjectSeg"""
     oKeys = list([
-        'sliceThickness',
-        'spaceBetweenSlices',
-        'kilovoltPeak'
+        'SegmentationMethod',
+        'SegmentationMethodDescription'
         ])
     
 
@@ -935,7 +960,56 @@ class APIObjectLink(APIBasic):
     def get(self):
         '''transforms the class object into a json readable dict'''
         return super(APIObjectLink, self).get()
-                                    
 
+class APIModality(APIBasic):
+    '''
+    API class for modalities
+    '''
+    oKeys = list([
+        'description',
+        'name'
+        ])
 
+    for i in APIBasic.oKeys:
+        oKeys.append(i)
 
+    def __init__(self):
+        super(APIModality, self).__init__(self.oKeys) 
+
+    def set(self, obj = None):
+        super(APIModality, self).set(obj = obj)
+
+    def get(self):
+        '''transforms the class object into a json readable dict'''
+        return super(APIModality, self).get()
+
+class APIPagination(object):
+    '''
+    API class for Pagination results
+    '''
+    oKeys = list([
+        'totalCount',
+        'pagination',
+        'items',
+        'nextPageUrl'
+        ])
+
+    def __init__(self, oKeys = oKeys):
+        for v in oKeys:
+                setattr(self, v, None)
+        
+    def set(self, obj = None):
+        ''' sets class variable for each key in the object to the keyname and its value'''
+        if  obj:
+            for v in self.oKeys:
+                if v in obj: 
+                    setattr(self, v, obj[v])              
+        else:
+            for v in self.oKeys:
+                setattr(self, v, None)
+
+    def get(self):
+        '''transforms the class object into a json readable dict'''
+        return self.__dict__
+                                           
+                                         
