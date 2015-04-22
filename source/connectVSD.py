@@ -98,7 +98,7 @@ class VSDConnecter:
             return None
     
 
-    def getAllPaginated(self, resource, itemlist = list()):
+    def getAllPaginated(self, resource, itemlist):
         '''
         returns all items as list 
 
@@ -110,17 +110,11 @@ class VSDConnecter:
         if res:
             page = APIPagination()
             page.set(obj = res)
-            print('nextpageurl:', page.nextPageUrl)
-            print('itemlist len', len(itemlist))
             for item in page.items:
-                print('add item')
                 itemlist.append(item)
-            print('itemlist len', len(itemlist))
             if page.nextPageUrl:
-                print('another page', page.nextPageUrl)
                 return self.getAllPaginated(page.nextPageUrl, itemlist = itemlist)
             else:
-                print('else return itemlist')
                 return itemlist
         else: 
             return itemlist
@@ -495,6 +489,20 @@ class VSDConnecter:
                 permission.append(lic)
         
         return permission
+
+    def getModalityList(self):
+        ''' retrieve a list of modalities objects (APIModality)'''
+
+        modalities = list()
+        items = self.getAllPaginated('modalities', itemlist = list())
+        if items:
+            for item in items:
+                modality = APIModality()
+                modality.set(obj = item)
+                modalities.append(modality)
+            return modalities
+        else:
+            return items
 
     def readFolders(self,folderList):
     #first pass: create one entry for each folder:
