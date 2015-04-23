@@ -98,6 +98,16 @@ class VSDConnecter:
             return None
     
 
+    def removeLinks(self, resource):
+        '''removes all related item from an object '''
+
+        obj = self.getObject(resource)
+        if obj.linkedObjectRelations:
+            for link in obj.linkedObjectRelations:
+                self.delRequest(link["selfUrl"])
+        else:
+            print('nothing to delete, no links available')
+
     def getAllPaginated(self, resource, itemlist):
         '''
         returns all items as list 
@@ -247,7 +257,10 @@ class VSDConnecter:
         try: 
             req = self.s.delete(self.fullUrl(resource))
             if req.status_code == requests.codes.ok:
-                print('resource {0} deleted'.format(self.fullUrl(resource)))
+                print('resource {0} deleted, 200'.format(self.fullUrl(resource)))
+                return req.status_code
+            elif req.status_code == requests.codes.no_content:
+                print('resource {0} deleted, 204'.format(self.fullUrl(resource)))
                 return req.status_code
             else:
                 print('resource {0} NOT (not existing or other problem) deleted'.format(self.fullUrl(resource)))
@@ -469,7 +482,7 @@ class VSDConnecter:
 
     def getLicenseList(self):
         ''' retrieve a list of the available licenses (APILicense)'''
-        res = self.s.getRequest('licenses')
+        res = self.getRequest('licenses')
         license = list()
         if res:
             for item in iter(res['items']):
@@ -480,7 +493,7 @@ class VSDConnecter:
 
     def getObjectRightList(self):
         ''' retrieve a list of the available base object rights (APIObjectRights) '''
-        res = self.s.getRequest('object_rights')
+        res = self.getRequest('object_rights')
         permission = list()
         if res:
             for item in iter(res['items']):
@@ -638,7 +651,8 @@ class VSDConnecter:
         else:
             return target
 
-        
+
+
         
 class APIBasic(object):
     """docstring for APIBasic"""
