@@ -334,7 +334,7 @@ class VSDConnecter:
         :returns: list of folder objects (json)
         '''
 
-        search = urllib.parse.quote(search)
+        search = urlparse_quote(search)
         if mode == 'exact':
             url = self.fullUrl(resource) + '?$filter=Term%20eq%20%27{0}%27'.format(search) 
         else:
