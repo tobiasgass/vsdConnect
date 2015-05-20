@@ -3,13 +3,27 @@
 # connectVSD 0.1
 # (c) Tobias Gass, 2015
 # conncetVSD 0.1 python 3 @Michael Kistler 2015
+from __future__ import print_function
 
 import sys
+if sys.version_info >= (3, 0):
+    PYTHON3 = True
+else:
+    PYTHON3 = False
+
 import os
-import urllib.request, urllib.error, urllib.parse, urllib
+import urllib
+if PYTHON3:
+    from urllib.parse import urlparse
+    from urllib.parse import quote as urlparse_quote
+else:
+    from urlparse import urlparse
+    from urllib import quote as urlparse_quote
+
 import json
 import getpass
-from pathlib import Path, PurePath, WindowsPath
+if PYTHON3:
+    from pathlib import Path, PurePath, WindowsPath
 import requests
 
 requests.packages.urllib3.disable_warnings()
@@ -67,7 +81,7 @@ class VSDConnecter:
         :param resource: (str) to the api resource
         :returns: (str) the full resource path 
         '''
-        res = urllib.parse.urlparse(str(resource))
+        res = urlparse(str(resource))
 
         if res.scheme == 'https':
             return resource
@@ -137,7 +151,12 @@ class VSDConnecter:
         :returns: either None if not an ID or the object ID (int)
         :raises: ValueError
         '''
-        oID = Path(urllib.parse.urlsplit(selfURL).path).name
+        selfURL_path = urllib.parse.urlsplit(selfURL).path
+        if PYTHON3:
+            oID = Path(selfURL_path).name
+        else:
+            oID = os.path.basename(selfURL_path)
+
         try: 
             r = int(oID)
         except ValueError as err:
@@ -315,7 +334,7 @@ class VSDConnecter:
         :returns: list of folder objects (json)
         '''
 
-        search = urllib.parse.quote(search)
+        search = urlparse_quote(search)
         if mode == 'exact':
             url = self.fullUrl(resource) + '?$filter=Term%20eq%20%27{0}%27'.format(search) 
         else:
@@ -413,7 +432,7 @@ class VSDConnecter:
         :param mode: (str) search for partial match ('default') or exact match ('exact')
         :returns: list of folder objects (APIFolders)
         '''   
-        search = urllib.parse.quote(search)
+        search = urlparse_quote(search)
         if mode == 'exact':
             url = self.url + "folders?$filter=Name%20eq%20%27{0}%27".format(search) 
         else:
@@ -446,7 +465,7 @@ class VSDConnecter:
         :param mode: (str) find exact term (exact) or partial match (default)
         :returns: ontology term entries (json)
         '''
-        search = urllib.parse.quote(search)
+        search = urlparse_quote(search)
         if mode == 'exact':
             url = self.url+"ontologies/{0}?$filter=Term%20eq%20%27{1}%27".format(oType,search) 
         else:
