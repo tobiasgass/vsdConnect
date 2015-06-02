@@ -16,7 +16,8 @@
     fp = Path('C:' + os.sep, 'test', 'test.nii')
 
 ## Files < 1 GB
-4. upload using the uploadFile
+
+4.upload using the uploadFile
 
     obj = api.uploadFile(fp)
 
@@ -27,7 +28,8 @@
 
 
 ## Files > 1 GB 
-4.define chunksize to 8 MB, default is 4MB
+
+4.define chunk size to eg. 8 MB if you dont want to use the default 4MB
 
     chunk = 1024 * 4096 * 2
 
