@@ -8,6 +8,8 @@ This library implements a client for the REST API of the virtualskeletondatabase
 - usage of **pathlib** instead of os.path
 - support file poster.py removed (no needed with requests)
 - introduction of API classes
+- Added SAML auth 
+- Added chunk Upload (upload files > 1GB)
  
 
 ### What is this repository for? ###
