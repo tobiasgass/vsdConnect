@@ -2,7 +2,8 @@
 
 # connectVSD 0.1
 # (c) Tobias Gass, 2015
-# conncetVSD 0.1 python 3 @Michael Kistler 2015
+# conncetVSD 0.2 python 3 @Michael Kistler 2015
+# changed / added auth 
 from __future__ import print_function
 
 import sys
@@ -25,31 +26,96 @@ import getpass
 if PYTHON3:
     from pathlib import Path, PurePath, WindowsPath
 import requests
+from requests.auth import AuthBase
+
+import io
+import base64
+import zlib
+try:
+    import lxml.etree as ET
+except:
+    import xml.etree.ElementTree as ET
+
+
+
 
 requests.packages.urllib3.disable_warnings()
 
+class SAMLAuth(AuthBase):
+    """Attaches SMAL to the given Request object. extends the request package auth class"""
+    def __init__(self, enctoken):
+        self.enctoken = enctoken
+
+    def __call__(self, r):
+        # modify and return the request
+        r.headers['Authorization'] = b'SAML auth=' + self.enctoken
+        return r
+
+def samltoken(fp, stsurl = 'https://ciam-dev-chic.custodix.com/sts/services/STS'):
+    ''' 
+    generates the saml auth token from a credentials file 
+
+    :param fp: (Path) file with the credentials (xml file)
+    :param stsurl: (str) url to the STS authority
+    :returns: (byte) enctoken 
+    '''
+
+    if fp.is_file():
+        tree = ET.ElementTree()
+        dom = tree.parse(str(fp))
+        authdata =  ET.tostring(dom, encoding = 'utf-8')
+
+    #send the xml in the attachment to https://ciam-dev-chic.custodix.com/sts/services/STS
+    r = requests.post(stsurl, data = authdata, verify = False)
+
+    if r.status_code == 200:
+
+        fileobject = io.BytesIO(r.content)
+
+        tree = ET.ElementTree()
+        dom = tree.parse(fileobject)
+        saml = ET.tostring(dom, method = "xml", encoding = "utf-8")
+
+
+        #ZLIB (RFC 1950) compress the retrieved SAML token.
+        ztoken = zlib.compress(saml, 9)
+
+        #Base64 (RFC 4648) encode the compressed SAML token.
+        enctoken = base64.b64encode(ztoken)
+        return enctoken
+    else:
+        return None
 
 class VSDConnecter:
     APIURL='https://demo.virtualskeleton.ch/api/'
 
-  
-    
-    def __init__(self,
+    def __init__(self, 
+        authtype = 'basic',
         url = "https://demo.virtualskeleton.ch/api/",
         username = "demo@virtualskeleton.ch", 
         password = "demo", 
-        version = ""):
-        
-        self.username = username
-        self.password = password
+        version = "",
+        token = None,
+        ):
+
         if version:
             version = str(version) + '/'
+
         self.url = url + version
-        
+
         self.s = requests.Session()
-        self.s.auth = (self.username, self.password)
-        self.s.verify = False
         
+        self.s.verify = False
+
+        if authtype == 'basic':
+            self.username = username
+            self.password = password
+            self.s.auth = (self.username, self.password)
+
+        elif authtype == 'saml':
+            self.token = token
+            self.s.auth = SAMLAuth(self.token)
+              
 
  
     def getAPIObjectType(self, response):
