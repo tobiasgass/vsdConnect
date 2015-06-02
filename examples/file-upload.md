@@ -21,7 +21,7 @@
 
     obj = api.uploadFile(fp)
 
-5. check the object
+5.check the object
 
     print(obj.selfUrl)
     https://demo.virtualskeleton.ch/api/objects/1
