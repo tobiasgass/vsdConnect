@@ -7,6 +7,7 @@
 from __future__ import print_function
 
 import sys
+import math
 if sys.version_info >= (3, 0):
     PYTHON3 = True
 else:
@@ -115,9 +116,9 @@ class VSDConnecter:
         elif authtype == 'saml':
             self.token = token
             self.s.auth = SAMLAuth(self.token)
-              
 
- 
+
+
     def getAPIObjectType(self, response):
         '''create an APIObject depending on the type 
 
@@ -433,6 +434,61 @@ class VSDConnecter:
             return obj
         else: 
             return res.status_code
+
+
+    def chunkedread(self, fp, chunksize):
+        '''
+        breaks the file into chunks of chunksize
+
+        :param fp: (Path) file
+        :param chunksize: (int) size in bytes of the chunk parts
+        :yields: chunk
+        '''
+
+        with fp.open('rb') as f:
+            while True:
+                chunk = f.read(chunksize)
+                if not chunk:
+                    break
+                yield(chunk)
+
+    def chunkFileUpload(self, fp, chunksize = 1024*4096):
+        ''' 
+        upload large files in chunks of max 100 MB size
+
+        :param fp: (Path) file
+        :param chunksize: (int) size in bytes of the chunk parts, default is 4MB
+        :returns: the generated API Object
+        '''
+        parts = math.ceil(fp.stat().st_size/chunksize)
+        part = 0
+        err = False
+        maxchunksize = 1024 * 1024 * 100
+        if chunksize < maxchunksize:
+            for chunk in self.chunkedread(fp, chunksize):
+                part = part + 1
+                print('uploading part {0} of {1}'.format(part,parts))
+                files  = { 'file' : (str(fp.name), chunk)}
+                res = self.s.post(self.url + 'chunked_upload?chunk={0}'.format(part), files = files)
+                if res.status_code == requests.codes.ok:
+                    print('uploaded part {0} of {1}'.format(part,parts))
+                else:
+                    err = True
+        
+            if not err:
+                resource = 'chunked_upload/commit?filename={0}'.format(fp.name)
+                res = self.postRequestSimple(resource)
+                relObj = res['relatedObject']
+                obj = self.getObject(relObj['selfUrl'])
+              
+                return obj
+            else:
+                return None
+        else:
+            print('no uploaded: defined chunksize {0} is bigger than the allowed maximum {1}'.format(chunksize, method))
+            return None
+ 
+
 
     def getFile(self, resource):
         '''return a APIFile object
