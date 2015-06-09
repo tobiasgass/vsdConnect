@@ -1,5 +1,5 @@
 #How to upload files
-
+Chunk upload can be used on all files. Howevery, the limit for the standard upload is 1 GB. Additionally, upload of file >500 MB tend to be slower. Therefore, we recommend to use chunk upload for file > 500 MB
 
 
 1.Import libs
@@ -15,7 +15,7 @@
 
     fp = Path('C:' + os.sep, 'test', 'test.nii')
 
-## Files < 1 GB
+## Files < 500 MB
 
 4.upload using the uploadFile
 
@@ -27,7 +27,7 @@
     https://demo.virtualskeleton.ch/api/objects/1
 
 
-## Files > 1 GB 
+## Files > 500 MB 
 
 4.define chunk size to eg. 8 MB if you dont want to use the default 4MB
 
