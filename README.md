@@ -9,7 +9,7 @@ This library implements a client for the REST API of the virtualskeletondatabase
 - support file poster.py removed (no needed with requests)
 - introduction of API classes
 - Added SAML auth 
-- Added chunk Upload (upload files > 1GB)
+- Added chunk Upload (upload files > 500 MB) 
  
 
 ### What is this repository for? ###
