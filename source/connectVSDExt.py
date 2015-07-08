@@ -29,7 +29,9 @@ class VSDConnecterExtension(VSDConnecter):
     def getLinkedSegmentation(self,objectID):
         result=None
         obj=self.getObject(objectID)
-        for link in obj['linkedObjects']:
+        if obj==None:
+            return None
+        for link in obj.linkedObjects:
             linkedObject=self.getRequest(link['selfUrl'])
             if linkedObject['type']==2:
                 result=linkedObject['id']
@@ -57,24 +59,17 @@ class VSDConnecterExtension(VSDConnecter):
 
         #add Ontology relations
         for ontRel in origObject.ontologyItemRelations:
-            #print "retrieving ontolgy for relation ",ontRel
-            #print
+           
             ont=self.getRequest(ontRel['selfUrl'])
-            #print "found ontology relation:",ont
-            #print
             newOntRel={}
             newOntRel["object"]={"selfUrl":self.url+'/objects/'+str(targetObjectID)}
             newOntRel["type"]=ont["type"]
             newOntRel["position"]=ont["position"]
             newOntRel["ontologyItem"]=ont["ontologyItem"]
-            #print "Updated ontology to reflect segmentation object:",newOntRel
-            #print
-            #print "Uploading Ontology"
+       
             result=self.addOntologyRelation(newOntRel)
             print ("done, result:",result)
-            #print
-            #print
-            #print
+           
        
 
     def setRightsBasedOnReferenceObject(self,objectID,referenceObjectID):
